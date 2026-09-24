@@ -58,12 +58,13 @@ export class RoomRegistry {
     return this.rooms.get(code.toUpperCase());
   }
 
-  /** Public rooms: waiting lobbies with the most humans first, then running matches. */
+  /** Public rooms that still have people in them: waiting lobbies with the most humans first, then running matches. */
   publicList(): RoomList {
     const waiting = (phase: string) => (phase === 'lobby' || phase === 'countdown' ? 0 : 1);
     const rooms = [...this.rooms.values()]
       .filter((room) => room.visibility === 'public')
       .map((room) => room.summary())
+      .filter((summary) => summary.humans > 0)
       .sort((a, b) => waiting(a.phase) - waiting(b.phase) || b.humans - a.humans || a.code.localeCompare(b.code));
     return { rooms };
   }
