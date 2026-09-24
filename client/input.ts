@@ -38,8 +38,24 @@ export class InputController {
   private pendingDash = false;
   private konami = '';
   private scoreboardOpen = false;
+  /**
+   * Invisible textarea that holds keyboard focus while you play. Keyboard-driven extensions (Vimium, Surfingkeys, …)
+   * swallow plain letter keys (d scrolls, r reloads, x closes the tab!) unless an editable element is focused, so we
+   * park focus here. Lives outside #ui, so ui.wantsKeyboard() ignores it.
+   */
+  private readonly sink: HTMLTextAreaElement;
 
   constructor(private readonly deps: InputDeps) {
+    this.sink = document.createElement('textarea');
+    this.sink.className = 'key-sink';
+    this.sink.tabIndex = -1;
+    this.sink.setAttribute('aria-hidden', 'true');
+    for (const attr of ['autocomplete', 'autocorrect', 'autocapitalize', 'spellcheck']) this.sink.setAttribute(attr, 'off');
+    this.sink.style.cssText =
+      'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;'
+      + 'resize:none;overflow:hidden;pointer-events:none;caret-color:transparent;';
+    this.sink.addEventListener('input', () => (this.sink.value = ''));
+    document.body.append(this.sink);
     addEventListener('keydown', this.keyDown);
     addEventListener('keyup', this.keyUp);
     addEventListener('blur', this.blur);
@@ -57,6 +73,7 @@ export class InputController {
     removeEventListener('mousedown', this.mouseDown);
     removeEventListener('mouseup', this.mouseUp);
     removeEventListener('wheel', this.wheel);
+    this.sink.remove();
   }
 
   sample(): SampledInput {
@@ -64,6 +81,7 @@ export class InputController {
       this.release();
       return { mx: 0, mz: 0, fire: false, dash: false };
     }
+    this.keepKeyboard();
     const sample = {
       mx: Number(this.held.has('right')) - Number(this.held.has('left')),
       mz: Number(this.held.has('down')) - Number(this.held.has('up')),
@@ -73,6 +91,15 @@ export class InputController {
     this.pendingDash = false;
     this.pendingFire = false;
     return sample;
+  }
+
+  /** Re-park focus on the sink whenever nothing that needs the keyboard (chat, name field, slider…) has it. */
+  private keepKeyboard(): void {
+    const active = document.activeElement;
+    if (active === this.sink || !document.hasFocus()) return;
+    if (!active || active === document.body || active instanceof HTMLButtonElement || active instanceof HTMLCanvasElement) {
+      this.sink.focus({ preventScroll: true });
+    }
   }
 
   private showScoreboard(show: boolean): void {
@@ -92,6 +119,8 @@ export class InputController {
   private readonly keyDown = (event: KeyboardEvent): void => {
     this.deps.unlockAudio();
     if (event.metaKey || event.ctrlKey || event.altKey || this.deps.wantsKeyboard()) return;
+    // Keep the sink empty; keys are game input, not text. (Enter/Tab/Escape still reach their window listeners.)
+    if (event.target === this.sink && event.key.length === 1) event.preventDefault();
     const key = event.key.toLowerCase();
     if (key === 'tab' || key === ' ' || key.startsWith('arrow')) event.preventDefault();
     if (!event.repeat) {
@@ -166,10 +195,10 @@ export class InputController {
   private readonly mouseDown = (event: MouseEvent): void => {
     this.deps.unlockAudio();
     if (event.button !== 0 || this.deps.pointerOverUi(event)) return;
-    // Clicking the game world must hand the keyboard back to the game (e.g. after typing a name or chatting).
-    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
-      document.activeElement.blur();
-    }
+    // Clicking the game world hands the keyboard back to the game (after typing a name, chatting, or an extension
+    // like Vimium stole focus). preventDefault keeps the browser from moving focus back to <body> afterwards.
+    event.preventDefault();
+    this.sink.focus({ preventScroll: true });
     if (this.deps.phase() === 'deploy') {
       const point = this.deps.pickGround(event.clientX, event.clientY);
       this.deps.send({ t: 'deploy', x: point.x, z: point.z });
