@@ -2,11 +2,12 @@
 
 Browser multiplayer top-down battle royale starring the crypto launchpad world — Doppler, Uniswap, Pons, Long, Jump, Fomo, Pump, Clanker, Zora, Bankr. Bots fill empty slots. Not financial advice.
 
-**Play: https://z80.wtf/royale** — open the link, pick a brand, hit **READY**. Once anyone is ready a 45 s
-auto-launch timer starts; if every human in the lobby is ready it launches immediately. Everyone in the lobby plays
-(ready or not), bots fill the rest. Arrive mid-match and you spectate, then play the next game. The first human in the
-lobby is host (team size solo → sixes, bot fill count, bot skill, force start). Dropped connections resume your seat
-for 90 s.
+**Play: https://z80.wtf/royale** — pick a public lobby from the list, join one by code, or **create** your own
+(public = listed, private = invite link only) and share its invite link (`z80.wtf/royale/#CODE`). Inside a lobby: pick
+a brand, hit **READY**. Once anyone is ready a 45 s auto-launch timer starts; if every human is ready it launches
+immediately. Everyone in the lobby plays (ready or not), bots fill the rest. Arrive mid-match and you spectate, then
+play the next game. The lobby's creator is host (team size solo → sixes, bot fill count, bot skill, visibility, force
+start). Dropped connections resume your seat for 90 s. Empty lobbies close after 3 minutes; the server caps at 40.
 
 ## Production setup
 
