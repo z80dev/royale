@@ -38,9 +38,15 @@ export class Announcer {
     this.el = h('div.announcer', null, this.banners, this.kills, this.toasts, this.rug);
   }
 
+  /** Drop match-scoped announcements (banners, kill toasts, RUGGED). Bottom toasts are not match-scoped
+   * ("lobby not found", "invite link copied") and survive screen changes; they expire on their own. */
   clear(): void {
-    for (const item of this.live) item.el.remove();
-    this.live.length = 0;
+    for (let i = this.live.length - 1; i >= 0; i--) {
+      const item = this.live[i];
+      if (item.el.parentElement === this.toasts) continue;
+      item.el.remove();
+      this.live.splice(i, 1);
+    }
     this.rugUntil = 0;
     this.rug.classList.add('hidden');
   }

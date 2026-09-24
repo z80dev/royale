@@ -3,7 +3,7 @@
 
 import { RARITY_COLORS, SCORE, ZONE_PHASES } from '../../shared/constants';
 import type { GameMap } from '../../shared/map';
-import type { GameEvent, ServerMsg } from '../../shared/protocol';
+import type { GameEvent, RoomErrorReason, ServerMsg } from '../../shared/protocol';
 import type { FrameView, HudState, UiDeps } from '../view';
 import { Announcer, type AnnounceStyle } from './announce';
 import { Chat } from './chat';
@@ -13,6 +13,7 @@ import { DeathScreen } from './death';
 import { DeployPicker } from './deploy';
 import { h, setText, toggle, uiScale } from './dom';
 import { Hud } from './hud';
+import { LobbyBrowser } from './browser';
 import { KillFeed } from './killfeed';
 import { LobbyScreen } from './lobby';
 import { MapBase } from './mapdraw';
@@ -38,7 +39,7 @@ const RUG_BANNER_RANGE = 30;
 
 const STREAK_CALLOUTS = new Set(['DOUBLE SPEND!', 'TRIPLE TOP!', 'WHALE ALERT!', 'MARKET MAKER', 'SATOSHI MODE']);
 
-type Screen = 'lobby' | 'match' | 'results';
+type Screen = 'browser' | 'lobby' | 'match' | 'results';
 
 export class Ui {
   private readonly ctx: UiContext;
@@ -47,6 +48,9 @@ export class Ui {
   private readonly layer: HTMLElement;
   private readonly corner: HTMLElement;
   private readonly lobby: LobbyScreen;
+  private readonly browser: LobbyBrowser;
+  /** Room code we're in ('' = none: lobby browser or still connecting). */
+  private room = '';
   private readonly chat: Chat;
   private readonly settings: Settings;
   private readonly hud: Hud;
@@ -81,6 +85,7 @@ export class Ui {
     this.chat = new Chat(this.ctx);
     this.settings = new Settings(this.ctx);
     this.lobby = new LobbyScreen(this.ctx);
+    this.browser = new LobbyBrowser(this.ctx);
     this.hud = new Hud(this.ctx);
     this.minimap = new Minimap();
     this.bigMap = new BigMap();
@@ -133,6 +138,7 @@ export class Ui {
       this.scoreboard.el,
       this.death.el,
       this.results.el,
+      this.browser.el,
       this.lobby.el,
       this.chat.el,
       this.lobby.countdownEl,
@@ -157,6 +163,31 @@ export class Ui {
   }
 
   // ───────────── public API (called by the client core) ─────────────
+
+  /** No room (boot without #CODE, after leaving, after a room error): show the lobby browser. */
+  showBrowser(): void {
+    this.leaveRoom();
+    this.browser.show();
+  }
+
+  /** Joined (or resumed) room `code`; the URL already carries `#CODE` for the invite link. */
+  onRoom(code: string): void {
+    if (code !== this.room) this.leaveRoom();
+    this.room = code;
+    this.lobby.setRoom(code);
+    this.browser.hide();
+  }
+
+  onRoomError(reason: RoomErrorReason): void {
+    const text =
+      reason === 'not_found'
+        ? 'lobby not found or expired'
+        : reason === 'full'
+          ? 'lobby is full'
+          : 'server is at max lobbies — try again soon';
+    this.announcer.toast(text, 'bad');
+    this.browser.unlock();
+  }
 
   onWelcome(id: string): void {
     this.ctx.welcomeId = id;
@@ -317,7 +348,13 @@ export class Ui {
 
     const seatless = this.inMatch && ctx.match?.you === null;
     const watching = this.inMatch && (!seatless || this.spectatorView);
-    const screen: Screen = this.results.visible ? 'results' : watching ? 'match' : 'lobby';
+    const screen: Screen = this.browser.isOpen
+      ? 'browser'
+      : this.results.visible
+        ? 'results'
+        : watching
+          ? 'match'
+          : 'lobby';
     if (screen !== this.screen) this.setScreen(screen);
 
     this.lobby.update(dt, performance.now());
@@ -336,7 +373,8 @@ export class Ui {
     const live = inMatch && (phase === 'playing' || phase === 'deploy');
     this.deploy.update(view, inMatch && phase === 'deploy' && ctx.match?.you !== null);
     this.overlay.update(view, dt, live);
-    if (screen === 'lobby') {
+    if (screen === 'lobby' || screen === 'browser') {
+      if (screen === 'browser') this.browser.update(now);
       this.crosshair.update(hud, false, dt);
       return;
     }
@@ -394,12 +432,12 @@ export class Ui {
 
   private setScreen(screen: Screen): void {
     this.screen = screen;
-    this.shell.classList.remove('screen-lobby', 'screen-match', 'screen-results');
+    this.shell.classList.remove('screen-browser', 'screen-lobby', 'screen-match', 'screen-results');
     this.shell.classList.add(`screen-${screen}`);
     toggle(this.lobby.el, 'hidden', screen !== 'lobby');
     toggle(this.hud.el, 'hidden', screen !== 'match');
     toggle(this.topRight, 'hidden', screen !== 'match');
-    if (screen === 'lobby') {
+    if (screen === 'lobby' || screen === 'browser') {
       this.chat.setMode('lobby');
       this.lobby.chatSlot.append(this.chat.el);
     } else {
@@ -429,6 +467,16 @@ export class Ui {
     toggle(this.shell, 'ui-w820', localW <= 820);
     toggle(this.shell, 'ui-h960', localH <= 960);
     toggle(this.shell, 'ui-h820', localH <= 820);
+  }
+
+  /** Drop everything scoped to the current room (match, lobby state, chat, countdown). */
+  private leaveRoom(): void {
+    this.leaveMatch();
+    this.room = '';
+    this.ctx.lobby = null;
+    this.ctx.welcomeId = null;
+    this.chat.clear();
+    this.lobby.leaveRoom();
   }
 
   private leaveMatch(): void {
@@ -462,7 +510,7 @@ export class Ui {
     }
     // Ready hotkey: lobby, results, or a seatless spectator (in a match F does nothing else; R is reload).
     const seatless = this.inMatch && this.ctx.match?.you === null;
-    if (e.code === 'KeyF' && !e.repeat && (this.screen !== 'match' || seatless)) {
+    if (e.code === 'KeyF' && !e.repeat && this.screen !== 'browser' && (this.screen !== 'match' || seatless)) {
       this.lobby.readyCheck.toggle();
       return;
     }

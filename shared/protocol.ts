@@ -157,11 +157,37 @@ export interface LobbyPlayer {
   ping: number; // ms
 }
 
+export type RoomVisibility = 'public' | 'private'; // public = listed in the lobby browser; private = invite link only
+
 export interface LobbySettings {
   teamSize: number; // 1 = solo … 6
   fillTo: number; // bots fill the match up to this many players total
   botSkill: 0 | 1 | 2; // 0 = paper hands, 1 = degen, 2 = whale
+  visibility: RoomVisibility;
 }
+
+// ───────────────────────────── Rooms (many lobbies per server) ─────────────────────────────
+// HTTP  GET /rooms            → RoomList (public rooms only; CORS-open so the static client can call it)
+// WS    /ws?room=CODE          → join that room (unknown code → `roomError` then close)
+// WS    /ws?create=public|private → create a room, you're its host; `welcome.room` carries the new code
+// Invite links are `<client url>#CODE`. Room codes: 6 chars of [A-Z2-9] without look-alikes (no O/0/I/1).
+
+export interface RoomSummary {
+  code: string;
+  host: string; // host's name ('' if nobody connected)
+  humans: number; // connected humans (seats held for reconnect count too)
+  fillTo: number;
+  teamSize: number;
+  botSkill: 0 | 1 | 2;
+  phase: Phase;
+  alive: number; // players alive if a match is running, else 0
+}
+
+export interface RoomList {
+  rooms: RoomSummary[];
+}
+
+export type RoomErrorReason = 'not_found' | 'full' | 'limit';
 
 // ───────────────────────────── Game events (inside snapshots) ─────────────────────────────
 
@@ -203,7 +229,7 @@ export type ClientMsg =
   // resumes the same lobby seat / in-match player instead of creating a new one.
   | { t: 'join'; name: string; character?: CharacterId; sid?: string }
   | { t: 'lobbySet'; name?: string; character?: CharacterId; team?: number; ready?: boolean }
-  | { t: 'settings'; teamSize?: number; fillTo?: number; botSkill?: 0 | 1 | 2 } // host only
+  | { t: 'settings'; teamSize?: number; fillTo?: number; botSkill?: 0 | 1 | 2; visibility?: RoomVisibility } // host
   | { t: 'start' } // host only: force-start now (skips the ready check)
   // One fixed 1/TICK_RATE movement step. Sent every client tick while in a match.
   | { t: 'in'; seq: number; mx: number; mz: number; aim: number; fire: boolean; dash: boolean }
@@ -222,12 +248,14 @@ export type ClientMsg =
   | { t: 'spectate'; dir: 1 | -1 } // cycle spectate target when dead
   | { t: 'emote'; i: number } // index into EMOTES
   | { t: 'chat'; text: string }
-  | { t: 'ping'; c: number };
+  | { t: 'ping'; c: number }
+  | { t: 'leave' }; // leave this room for good (frees your seat immediately instead of holding it for reconnect)
 
 // ───────────────────────────── Server → Client ─────────────────────────────
 
 export type ServerMsg =
-  | { t: 'welcome'; id: string; version: number }
+  | { t: 'welcome'; id: string; version: number; room: string } // room = this room's code
+  | { t: 'roomError'; reason: RoomErrorReason } // sent right before the server closes the socket
   | {
       t: 'lobby';
       phase: Phase;
@@ -269,4 +297,4 @@ export type ServerMsg =
   | { t: 'chat'; from: string; name: string; text: string; color: string }
   | { t: 'pong'; c: number };
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;

@@ -50,8 +50,8 @@ export class ResultsScreen {
           h(
             'div.panel-head',
             null,
-            h('h3', { text: 'All-time degens' }),
-            h('span.panel-note', { text: 'this session' }),
+            h('h3', { text: "This lobby's degens" }),
+            h('span.panel-note', { text: 'session PnL' }),
           ),
           this.board,
         ),

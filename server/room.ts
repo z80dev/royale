@@ -14,6 +14,9 @@ import {
   type LobbyPlayer,
   type LobbySettings,
   type Phase,
+  type RoomErrorReason,
+  type RoomSummary,
+  type RoomVisibility,
   type ServerMsg,
   type SessionEntry,
 } from '../shared/protocol';
@@ -82,7 +85,7 @@ export class Room {
   private countdownT = 0;
   /** Seconds until the ready-check auto-launch (0 = no timer running). */
   private readyT = 0;
-  private readonly settings: LobbySettings = { teamSize: 1, fillTo: 16, botSkill: 1 };
+  private readonly settings: LobbySettings;
   private readonly board = new Map<string, SessionEntry>();
   /** Session id (per browser tab) → seat id, for resuming after a dropped connection. */
   private readonly sids = new Map<string, string>();
@@ -103,7 +106,18 @@ export class Room {
   private tickMsMax = 0;
   private tickCount = 0;
 
-  constructor(private readonly timeScale: number) {}
+  /** Date.now() since which the room has had no sockets and no held seats (0 = occupied). */
+  private emptySince: number;
+
+  constructor(
+    /** Invite code (6 chars, see rooms.ts). */
+    readonly code: string,
+    visibility: RoomVisibility,
+    private readonly timeScale: number,
+  ) {
+    this.settings = { teamSize: 1, fillTo: 16, botSkill: 1, visibility };
+    this.emptySince = Date.now();
+  }
 
   // ───────────────────────────── Connections ─────────────────────────────
 
@@ -128,7 +142,7 @@ export class Room {
       specTarget: null,
     };
     this.clients.set(id, client);
-    this.send(client, { t: 'welcome', id, version: PROTOCOL_VERSION });
+    this.send(client, { t: 'welcome', id, version: PROTOCOL_VERSION, room: this.code });
     this.send(client, this.lobbyMessage());
     return conn;
   }
@@ -159,14 +173,87 @@ export class Room {
   private expireSeats(now: number): void {
     for (const client of [...this.clients.values()]) {
       if (client.conn || now - client.disconnectedAt <= this.reconnectGraceMs()) continue;
-      this.clients.delete(client.id);
-      if (client.sid && this.sids.get(client.sid) === client.id) this.sids.delete(client.sid);
-      this.systemChat(`${client.name} left`);
-      if (this.hostId === client.id) this.pickHost();
-      this.updateReadyCheck();
-      this.lobbyDirty = true;
+      this.removeSeat(client);
     }
+  }
+
+  /** Free a seat for good (grace expired or `leave`): host transfer, ready re-check, empty match → lobby. */
+  private removeSeat(client: Client): void {
+    this.clients.delete(client.id);
+    if (client.sid && this.sids.get(client.sid) === client.id) this.sids.delete(client.sid);
+    if (!client.joined) return;
+    this.systemChat(`${client.name} left`);
+    this.match?.handOffToAi(client.id);
+    if (this.hostId === client.id) this.pickHost();
     if (this.match && this.joinedClients().length === 0) this.returnToLobby();
+    this.updateReadyCheck();
+    this.lobbyDirty = true;
+  }
+
+  /** `leave`: the seat is freed immediately (no reconnect hold) and the socket closed. */
+  private handleLeave(client: Client): void {
+    const ws = client.conn?.ws;
+    client.conn = null;
+    this.removeSeat(client);
+    try {
+      ws?.close?.();
+    } catch {
+      // already closing
+    }
+  }
+
+  /** Close every socket (room torn down). Clients get a system chat line + `roomError` first. */
+  shutdown(text: string): void {
+    for (const client of this.clients.values()) {
+      const ws = client.conn?.ws;
+      if (!ws) continue;
+      this.systemChat(text, client);
+      this.send(client, { t: 'roomError', reason: 'not_found' });
+      client.conn = null;
+      try {
+        ws.close?.();
+      } catch {
+        // already closing
+      }
+    }
+    this.clients.clear();
+    this.match = null;
+    this.snaps = null;
+  }
+
+  /** Sockets currently attached (joined or not) — the per-room connection cap counts these. */
+  socketCount(): number {
+    let n = 0;
+    for (const c of this.clients.values()) if (c.conn) n++;
+    return n;
+  }
+
+  /** True once the room has had no sockets and no held seats for `ttlMs`. */
+  idleFor(now: number, ttlMs: number): boolean {
+    if (this.clients.size > 0) {
+      this.emptySince = 0;
+      return false;
+    }
+    if (this.emptySince === 0) this.emptySince = now;
+    return now - this.emptySince >= ttlMs;
+  }
+
+  get visibility(): RoomVisibility {
+    return this.settings.visibility;
+  }
+
+  summary(): RoomSummary {
+    const host = this.hostId ? this.clients.get(this.hostId) : undefined;
+    return {
+      code: this.code,
+      host: host?.conn ? host.name : '',
+      humans: this.joinedClients().length,
+      fillTo: this.settings.fillTo,
+      teamSize: this.settings.teamSize,
+      botSkill: this.settings.botSkill,
+      phase: this.phase(),
+      alive: this.match ? this.match.aliveCount() : 0,
+    };
   }
 
   pong(conn: Conn): void {
@@ -187,6 +274,10 @@ export class Room {
     }
     if (msg.t === 'join') {
       this.handleJoin(client, msg);
+      return;
+    }
+    if (msg.t === 'leave') {
+      this.handleLeave(client);
       return;
     }
     if (!client.joined) return;
@@ -244,6 +335,19 @@ export class Room {
     if (next) this.systemChat(`${next.name} is now the host`);
   }
 
+  /** Refuse a socket (room full): `roomError`, then close. */
+  private reject(client: Client, reason: RoomErrorReason): void {
+    this.send(client, { t: 'roomError', reason });
+    const ws = client.conn?.ws;
+    this.clients.delete(client.id);
+    client.conn = null;
+    try {
+      ws?.close?.();
+    } catch {
+      // already closing
+    }
+  }
+
   // ───────────────────────────── Lobby ─────────────────────────────
 
   private handleJoin(client: Client, msg: Extract<ClientMsg, { t: 'join' }>): void {
@@ -254,6 +358,12 @@ export class Room {
         this.reattach(client, seat);
         return;
       }
+    }
+    if (!client.joined && this.joinedClients().length >= MAX_PLAYERS) {
+      this.reject(client, 'full');
+      return;
+    }
+    if (msg.sid && !client.joined) {
       this.sids.set(msg.sid, client.id);
       client.sid = msg.sid;
     }
@@ -294,7 +404,7 @@ export class Room {
         // already closing
       }
     }
-    this.send(seat, { t: 'welcome', id: seat.id, version: PROTOCOL_VERSION });
+    this.send(seat, { t: 'welcome', id: seat.id, version: PROTOCOL_VERSION, room: this.code });
     this.systemChat(`${seat.name} reconnected`);
     const match = this.match;
     if (match) {
@@ -327,7 +437,14 @@ export class Room {
   }
 
   private handleSettings(client: Client, msg: Extract<ClientMsg, { t: 'settings' }>): void {
-    if (client.id !== this.hostId || this.match) return;
+    if (client.id !== this.hostId) return;
+    if (msg.visibility !== undefined && msg.visibility !== this.settings.visibility) {
+      this.settings.visibility = msg.visibility;
+      this.systemChat(msg.visibility === 'public' ? 'room is now public — listed in the lobby browser' :
+        'room is now private — invite link only');
+      this.lobbyDirty = true;
+    }
+    if (this.match) return;
     if (msg.teamSize !== undefined) this.settings.teamSize = msg.teamSize;
     if (msg.fillTo !== undefined) this.settings.fillTo = clamp(msg.fillTo, 1, MAX_PLAYERS);
     if (msg.botSkill !== undefined) this.settings.botSkill = msg.botSkill;
@@ -536,7 +653,8 @@ export class Room {
     }
     const teams = new Set(entrants.map((e) => e.team)).size;
     console.log(
-      `[match] started: ${humans.length} human(s), ${entrants.length - humans.length} bot(s), ${teams} teams, ` +
+      `[room ${this.code}] match started: ${humans.length} human(s), ${entrants.length - humans.length} bot(s), ` +
+        `${teams} teams, ` +
         `seed ${this.match.seed}`,
     );
     this.lobbyDirty = true;
@@ -654,7 +772,7 @@ export class Room {
   private logMatchEnd(match: Match): void {
     const avg = this.tickCount ? this.tickMsTotal / this.tickCount : 0;
     console.log(
-      `[match] ended: winner team ${match.winnerTeam} after ${match.time.toFixed(1)}s · ` +
+      `[room ${this.code}] match ended: winner team ${match.winnerTeam} after ${match.time.toFixed(1)}s · ` +
         `tick avg ${avg.toFixed(3)}ms max ${this.tickMsMax.toFixed(3)}ms over ${this.tickCount} ticks`,
     );
   }

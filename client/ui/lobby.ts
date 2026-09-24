@@ -4,6 +4,7 @@
 import { CHARACTER_BY_ID, CHARACTERS, MAX_PLAYERS, SCORE, type CharacterId } from '../../shared/constants';
 import type { LobbyPlayer, SessionEntry } from '../../shared/protocol';
 import type { LobbyMsg, UiContext } from './context';
+import { heroLogo, walletButton } from './hero';
 import { ReadyCheck } from './ready';
 import {
   badge,
@@ -82,6 +83,9 @@ export class LobbyScreen {
   readonly el: HTMLElement;
   readonly chatSlot: HTMLElement;
   readonly cornerSlot: HTMLElement;
+  private readonly roomCode: HTMLElement;
+  private readonly visibilityBtn: HTMLButtonElement;
+  private inviteUrl = '';
   private readonly nameInput: HTMLInputElement;
   private readonly cards: CharacterCard[] = [];
   private readonly detail: HTMLElement;
@@ -131,35 +135,38 @@ export class LobbyScreen {
     const storedChar = storageGet('lr.char') as CharacterId | null;
     this.character = storedChar && CHARACTER_BY_ID[storedChar] ? storedChar : 'doppler';
 
-    // ── Hero
-    const logo = h(
-      'div.logo',
-      null,
-      h('div.logo-kicker', { text: '◆ season 0 · genesis block ◆' }),
-      h('h1.logo-title', { 'data-text': 'LAUNCHPAD' }, 'LAUNCHPAD'),
-      h('h1.logo-title.logo-title--royale', { 'data-text': 'ROYALE' }, 'ROYALE'),
-      h(
-        'div.logo-sub',
-        null,
-        'a ',
-        h('img.doppler-mark', { src: 'logos/doppler-mark.svg', alt: 'doppler', draggable: 'false' }),
-        h('span.doppler-fallback', { text: 'doppler.lol' }),
-        ' production · not financial advice',
-      ),
-    );
-    const mark = logo.querySelector<HTMLImageElement>('.doppler-mark')!;
-    mark.addEventListener('error', () => mark.remove(), { once: true });
-    mark.addEventListener('load', () => logo.querySelector('.doppler-fallback')?.remove(), { once: true });
-
-    const walletBtn = h('button.wallet-btn', null, h('span.wallet-dot'), 'Connect Wallet');
-    walletBtn.addEventListener('click', () => {
+    // ── Hero: logo with the room bar (code, invite link, visibility, leave) as its sub-line
+    this.roomCode = h('span.room-code');
+    const copyBtn = h('button.btn.room-copy', { title: 'Copy the invite link' }, 'COPY INVITE LINK');
+    copyBtn.addEventListener('click', () => {
       ctx.click();
-      ctx.toast('lol no. this is a game, ser', 'gold');
-      walletBtn.classList.remove('nope');
-      void walletBtn.offsetWidth;
-      walletBtn.classList.add('nope');
+      void copyText(this.inviteUrl).then((ok) =>
+        ctx.toast(ok ? 'invite link copied — send it to the group chat' : `invite link: ${this.inviteUrl}`, 'good'),
+      );
     });
-    this.cornerSlot = h('div.lobby-corner', null, walletBtn);
+    this.visibilityBtn = h('button.room-vis', { title: 'Public lobbies are listed in the lobby browser' });
+    this.visibilityBtn.addEventListener('click', () => {
+      const settings = this.ctx.lobby?.settings;
+      if (!this.isHost || !settings) return;
+      ctx.click();
+      ctx.deps.send({ t: 'settings', visibility: settings.visibility === 'public' ? 'private' : 'public' });
+    });
+    const leaveBtn = h('button.btn.btn-ghost.room-leave', { title: 'Back to the lobby browser' }, 'LEAVE LOBBY');
+    leaveBtn.addEventListener('click', () => {
+      ctx.click();
+      ctx.deps.rooms.leave();
+    });
+    const roomBar = h(
+      'div.room-bar',
+      null,
+      h('span.room-label', { text: 'LOBBY' }),
+      this.roomCode,
+      this.visibilityBtn,
+      copyBtn,
+      leaveBtn,
+    );
+    const logo = heroLogo(roomBar);
+    this.cornerSlot = h('div.lobby-corner', null, walletButton(ctx));
 
     // ── Character select
     const grid = h('div.char-grid');
@@ -328,7 +335,7 @@ export class LobbyScreen {
           h(
             'div.panel-head',
             null,
-            h('h3', { text: 'All-time degens' }),
+            h('h3', { text: "This lobby's degens" }),
             h('span.panel-note', { text: 'session PnL' }),
           ),
           this.board,
@@ -397,6 +404,30 @@ export class LobbyScreen {
     return lobby.players.find((p) => p.id === this.ctx.welcomeId) ?? null;
   }
 
+  /** Left the room (back to the browser): clear room-scoped overlays. */
+  leaveRoom(): void {
+    this.countdown.reset();
+  }
+
+  /** Joined room `code`; the invite link is the current URL (the core has already put `#CODE` in it). */
+  setRoom(code: string): void {
+    setText(this.roomCode, code);
+    this.inviteUrl = location.href;
+  }
+
+  private renderVisibility(msg: LobbyMsg): void {
+    const isPublic = msg.settings.visibility === 'public';
+    setText(this.visibilityBtn, isPublic ? '● PUBLIC' : '🔒 PRIVATE');
+    toggle(this.visibilityBtn, 'public', isPublic);
+    toggle(this.visibilityBtn, 'editable', this.isHost);
+    this.visibilityBtn.disabled = !this.isHost;
+    this.visibilityBtn.title = this.isHost
+      ? `Click to make it ${isPublic ? 'private (invite link only)' : 'public (listed in the browser)'}`
+      : isPublic
+        ? 'Listed in the lobby browser'
+        : 'Invite link only';
+  }
+
   /** New lobby state from the server. */
   apply(msg: LobbyMsg): void {
     const me = this.me();
@@ -413,6 +444,7 @@ export class LobbyScreen {
     this.renderTeams(msg);
     this.readyCheck.apply(msg);
     this.renderHost(msg);
+    this.renderVisibility(msg);
     this.renderPlayers(msg);
     this.renderBoard(msg.board);
     this.countdown.apply(msg);
@@ -698,6 +730,15 @@ class CountdownOverlay {
     this.el = h('div.countdown.hidden', null, h('div.cd-rings'), this.sub, this.num);
   }
 
+  /** Left the room: stop any running countdown / LFG flash. */
+  reset(): void {
+    this.deadline = 0;
+    this.shown = -1;
+    this.lfgUntil = 0;
+    this.el.classList.remove('lfg');
+    this.el.classList.add('hidden');
+  }
+
   apply(msg: LobbyMsg): void {
     if (msg.phase === 'countdown' && msg.countdown > 0) {
       const deadline = performance.now() + msg.countdown * 1000;
@@ -750,5 +791,21 @@ class CountdownOverlay {
       this.setNumber(String(left), 'launching in');
       this.ctx.deps.audio.play('countdown');
     }
+  }
+}
+
+/** Clipboard write with a fallback for insecure (plain-http LAN) origins; resolves false if both fail. */
+async function copyText(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const area = h('textarea', { style: 'position:fixed;opacity:0;pointer-events:none' });
+    area.value = text;
+    document.body.append(area);
+    area.select();
+    const ok = document.execCommand('copy');
+    area.remove();
+    return ok;
   }
 }

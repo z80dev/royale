@@ -23,6 +23,12 @@ export const READY_TIMEOUT = 45;
 export const READY_WARNING = 10;
 /** Seconds a disconnected human's seat (lobby spot / in-match player) is held for a reconnect (× time scale). */
 export const RECONNECT_GRACE = 90;
+/** Most rooms (lobbies) one server hosts at once. */
+export const MAX_ROOMS = 40;
+/** A room with no sockets and no held seats is deleted after this many seconds (× time scale). */
+export const ROOM_IDLE_TTL = 180;
+/** A room whose tick throws this many times in a row is torn down. */
+export const ROOM_MAX_CONSECUTIVE_ERRORS = 3;
 
 export const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 

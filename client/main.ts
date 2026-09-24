@@ -1,6 +1,7 @@
 import { TICK_DT, WEAPONS } from '../shared/constants';
 import { generateMap } from '../shared/map';
-import type { ClientMsg, GameEvent, ServerMsg } from '../shared/protocol';
+import type { ClientMsg, GameEvent, RoomErrorReason, ServerMsg } from '../shared/protocol';
+import { roomFromHash, roomsUrl, setRoomHash, type RoomTarget } from './config';
 import type { FrameView, HudState, SfxName } from './view';
 import { Renderer } from './render';
 import { Ui } from './ui';
@@ -31,7 +32,7 @@ renderer.setMap(lobbyMap);
 audio.setMusic('lobby');
 
 let deployTarget: { x: number; z: number } | null = null;
-let net: Net;
+const net = new Net({ message: handleServerMessage, roomError: handleRoomError });
 const send = (msg: ClientMsg): void => {
   if (msg.t === 'lobbySet') {
     try {
@@ -49,6 +50,12 @@ const ui = new Ui(uiRoot, {
   audio,
   project: (x, y, z) => renderer.project(x, y, z),
   map: () => currentMap,
+  rooms: {
+    join: (code) => enterRoom({ room: code.trim().toUpperCase() }),
+    create: (visibility) => enterRoom({ create: visibility }),
+    leave: leaveRoom,
+    roomsUrl,
+  },
 });
 
 let fps = 60;
@@ -77,7 +84,54 @@ const input = new InputController({
     ...(state.self?.nearChest != null ? { chest: state.self.nearChest } : {}),
   }),
 });
-net = new Net(handleServerMessage);
+
+/** Drop every trace of the previous room/match and show the lobby orbit backdrop. */
+function resetToBackdrop(): void {
+  if (currentMap !== lobbyMap) renderer.setMap(lobbyMap);
+  currentMap = lobbyMap;
+  matchSeed = null;
+  deployTarget = null;
+  state.resetLobby(lobbyMap);
+  audio.setMusic('lobby');
+}
+
+/** Leave whatever room we are in (freeing the seat) and connect to another / create one. */
+function enterRoom(target: RoomTarget): void {
+  if (net.status !== 'idle') net.leave();
+  resetToBackdrop();
+  net.connect(target);
+}
+
+/** Leave for good and go back to the lobby browser. */
+function leaveRoom(): void {
+  net.leave();
+  resetToBackdrop();
+  setRoomHash(null);
+  ui.showBrowser();
+}
+
+function handleRoomError(reason: RoomErrorReason): void {
+  resetToBackdrop();
+  setRoomHash(null);
+  ui.onRoomError(reason);
+  ui.showBrowser();
+}
+
+// The URL hash is the room (`#CODE` = invite link). Editing it / following another invite switches rooms.
+addEventListener('hashchange', () => {
+  const code = roomFromHash();
+  if (code === net.room && net.status !== 'idle') return;
+  if (code) enterRoom({ room: code });
+  else leaveRoom();
+});
+
+const initialRoom = roomFromHash();
+if (initialRoom) {
+  net.connect({ room: initialRoom });
+} else {
+  setRoomHash(null);
+  ui.showBrowser();
+}
 
 function viewAt(now: number, world: WorldFrame, includeMouse: boolean): FrameView {
   const cameraMode = state.phase === 'lobby' || state.phase === 'countdown' ? 'lobby'
@@ -170,6 +224,9 @@ function playEvent(event: GameEvent, view: FrameView): void {
 function handleServerMessage(msg: ServerMsg): void {
   switch (msg.t) {
     case 'welcome':
+      // replaceState: no reload, no hashchange — the address bar simply becomes the invite link.
+      setRoomHash(msg.room);
+      ui.onRoom(msg.room);
       ui.onWelcome(msg.id);
       break;
     case 'lobby':

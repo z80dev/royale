@@ -4708,3 +4708,351 @@ label.set-row {
   min-width: 18px;
   font-size: 10px;
 }
+
+/* ─────────────────────────── Lobby browser (no room) ─────────────────────────── */
+
+.browser {
+  z-index: 20;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 18px;
+  padding: 18px 24px 16px;
+  pointer-events: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.rb-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+  width: min(1320px, 100%);
+  justify-self: center;
+  animation: rise 0.7s 0.1s var(--ease-out) both;
+}
+
+.rb-list-panel {
+  min-height: 420px;
+}
+
+.rb-side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.rb-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+}
+
+.rb-head {
+  padding-top: 0;
+  padding-bottom: 2px;
+  font: 700 10px var(--font-mono);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.rb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100 * var(--lvh) - 330px);
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.rb-room {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+  animation: row-in 0.35s var(--ease-out) both;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.rb-room:hover {
+  border-color: var(--line-strong);
+  background: rgba(124, 255, 212, 0.05);
+}
+
+.rb-room-name {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rb-host {
+  font: 700 14px var(--font-ui);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rb-code {
+  font: 700 11px var(--font-mono);
+  letter-spacing: 0.18em;
+  color: var(--accent-2);
+}
+
+.rb-seats {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font: 600 11px var(--font-mono);
+  color: #c3d2de;
+}
+
+.rb-seats-bar {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.rb-seats-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-deep), var(--accent-2));
+  transform-origin: left;
+  transition: transform 0.4s var(--ease-out);
+}
+
+.rb-mode {
+  font: 600 12px var(--font-ui);
+  color: #c3d2de;
+}
+
+.rb-state {
+  font: 700 11.5px var(--font-mono);
+  color: var(--muted);
+}
+
+.rb-room.launching .rb-state {
+  color: var(--gold);
+}
+
+.rb-room.live .rb-state {
+  color: #ff8aa0;
+}
+
+.rb-room.live .rb-state::before {
+  content: '● ';
+  color: var(--danger);
+  animation: blink 1.2s ease-in-out infinite;
+}
+
+.rb-join {
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent) 50%, var(--accent-deep));
+  font-size: 12px;
+  color: #03140e;
+}
+
+.rb-room.live .rb-join {
+  border: 1px solid rgba(255, 59, 92, 0.5);
+  background: rgba(255, 59, 92, 0.12);
+  color: #ffc2cf;
+}
+
+.rb-empty {
+  display: grid;
+  place-items: center;
+  gap: 6px;
+  padding: 60px 20px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 14px;
+  text-align: center;
+}
+
+.rb-empty-title {
+  font: 900 20px var(--font-display);
+}
+
+.rb-empty-sub {
+  font: 500 12px var(--font-mono);
+  color: var(--muted);
+}
+
+.rb-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: auto;
+  font: 500 11px var(--font-mono);
+  color: var(--dim);
+}
+
+.rb-poll-dot {
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+}
+
+.rb-status.bad {
+  color: var(--danger);
+}
+
+.rb-foot:has(.rb-status.bad) .rb-poll-dot,
+.rb-foot:has(.rb-status.stale) .rb-poll-dot {
+  background: var(--danger);
+  box-shadow: 0 0 8px var(--danger);
+}
+
+.rb-create {
+  width: 100%;
+  height: 54px;
+  flex-direction: column;
+  gap: 3px;
+  border: 0;
+  background: linear-gradient(135deg, #ffe07a, var(--gold) 45%, #ff7a2f);
+  color: #1c0e00;
+  font-size: 17px;
+  box-shadow:
+    0 10px 34px rgba(255, 182, 39, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.rb-create:not(:disabled):hover {
+  border: 0;
+  box-shadow: 0 0 44px rgba(255, 182, 39, 0.6);
+}
+
+.rb-code-row {
+  display: flex;
+  gap: 8px;
+}
+
+.rb-code-input {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: rgba(0, 0, 0, 0.35);
+  font: 800 20px var(--font-mono);
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  outline: none;
+}
+
+.rb-code-input::placeholder {
+  color: rgba(255, 255, 255, 0.12);
+}
+
+.rb-code-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(25, 227, 167, 0.18);
+}
+
+.rb-code-join {
+  height: 46px;
+}
+
+.ui-w1100 .rb-main {
+  grid-template-columns: 1fr;
+}
+
+.ui-w1100 .rb-row {
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr) 84px;
+}
+
+.ui-w1100 .rb-row > :nth-child(3) {
+  display: none;
+}
+
+.screen-browser .toasts {
+  bottom: 40px;
+}
+
+/* ─────────────────────────── In-room bar (under the logo) ─────────────────────────── */
+
+.room-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.room-label {
+  font: 700 10px var(--font-mono);
+  letter-spacing: 0.24em;
+  color: var(--muted);
+}
+
+.room-code {
+  padding: 4px 10px;
+  border: 1px solid rgba(124, 255, 212, 0.4);
+  border-radius: 8px;
+  background: rgba(25, 227, 167, 0.1);
+  font: 800 16px/1.2 var(--font-mono);
+  letter-spacing: 0.22em;
+  color: var(--accent-2);
+  text-shadow: 0 0 12px rgba(124, 255, 212, 0.5);
+  user-select: text;
+}
+
+.room-vis {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  font: 700 10.5px var(--font-mono);
+  letter-spacing: 0.1em;
+  color: #ffd98a;
+}
+
+.room-vis.public {
+  color: var(--accent-2);
+}
+
+.room-vis.editable:hover {
+  border-color: var(--line-strong);
+  background: rgba(124, 255, 212, 0.1);
+}
+
+.room-bar .btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.room-copy {
+  border-color: rgba(124, 255, 212, 0.45);
+  color: var(--accent-2);
+}
+
+.room-leave {
+  color: var(--muted);
+}
+
+.room-leave:hover {
+  color: #ffc2cf;
+}
+
+.browser .lobby-bg {
+  background:
+    radial-gradient(1100px 520px at 50% -8%, rgba(25, 227, 167, 0.18), transparent 65%),
+    linear-gradient(180deg, rgba(3, 5, 9, 0.55), rgba(3, 5, 9, 0.82));
+}
+
+.browser .panel.glass {
+  background: linear-gradient(180deg, var(--glass-hi), transparent 42%), var(--glass-strong);
+}

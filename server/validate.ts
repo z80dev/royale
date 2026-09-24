@@ -100,10 +100,13 @@ export function parseClientMsg(raw: string | Buffer): ClientMsg | null {
       if (finite(data.teamSize)) msg.teamSize = clampNum(Math.floor(data.teamSize), 1, MAX_TEAM_SIZE);
       if (finite(data.fillTo)) msg.fillTo = clampNum(Math.floor(data.fillTo), 1, MAX_PLAYERS);
       if (data.botSkill === 0 || data.botSkill === 1 || data.botSkill === 2) msg.botSkill = data.botSkill;
+      if (data.visibility === 'public' || data.visibility === 'private') msg.visibility = data.visibility;
       return msg;
     }
     case 'start':
       return { t: 'start' };
+    case 'leave':
+      return { t: 'leave' };
     case 'deploy':
       if (!finite(data.x) || !finite(data.z)) return null;
       return { t: 'deploy', x: clampNum(data.x, -MAX_COORD, MAX_COORD), z: clampNum(data.z, -MAX_COORD, MAX_COORD) };

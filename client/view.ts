@@ -10,6 +10,7 @@ import type {
   LootItem,
   Phase,
   PlayerSnap,
+  RoomVisibility,
   RosterEntry,
   SelfSnap,
   ZoneSnap,
@@ -128,10 +129,19 @@ export interface AudioApi {
   setVolume(master: number): void; // 0..1, persisted by caller
 }
 
+/** Lobby-browser actions the UI triggers; the core owns the socket and the `#CODE` URL hash. */
+export interface RoomActions {
+  join(code: string): void; // connect to an existing room (sets the hash once welcomed)
+  create(visibility: RoomVisibility): void; // create a room; you become its host
+  leave(): void; // leave the current room for good and return to the browser
+  roomsUrl(): string; // GET → RoomList (public rooms)
+}
+
 /** What the UI needs from the rest of the client. */
 export interface UiDeps {
   send(msg: ClientMsg): void;
   audio: AudioApi;
   project(x: number, y: number, z: number): { x: number; y: number; visible: boolean }; // world → CSS px
   map(): GameMap | null; // current match map (deploy picker, minimap)
+  rooms: RoomActions;
 }

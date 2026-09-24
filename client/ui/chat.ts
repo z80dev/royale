@@ -40,6 +40,12 @@ export class Chat {
     this.input.addEventListener('blur', () => {
       if (this.mode === 'match') this.el.classList.remove('open');
     });
+    this.clear();
+  }
+
+  /** New room: drop the previous room's conversation. */
+  clear(): void {
+    this.log.replaceChildren();
     this.system('gm. welcome to Launchpad Royale — type "gm" and see who answers.');
   }
 
