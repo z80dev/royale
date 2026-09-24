@@ -1,0 +1,21 @@
+{
+  "name": "launchpad-battle-royale",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "bun build client/main.ts --outdir public/dist --target browser --minify --sourcemap=linked",
+    "build:pages": "bun build client/main.ts --outdir public/dist --target browser --minify --sourcemap=linked --define LR_SERVER_URL='\"wss://royale.z80.workers.dev/ws\"'",
+    "start": "bun run build && bun server/index.ts",
+    "dev": "bun build client/main.ts --outdir public/dist --target browser --sourcemap=linked --watch & bun --watch server/index.ts",
+    "tunnel": "cloudflared tunnel --url http://localhost:${PORT:-3000}",
+    "typecheck": "tsc --noEmit -p ."
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "@types/three": "^0.186.0",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  }
+}

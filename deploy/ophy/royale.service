@@ -1,0 +1,16 @@
+[Unit]
+Description=Launchpad Royale game server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=z80
+WorkingDirectory=/home/z80/services/royale
+Environment=HOST=127.0.0.1
+Environment=PORT=18800
+ExecStart=/home/z80/.bun/bin/bun server/index.ts
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

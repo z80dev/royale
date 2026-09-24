@@ -1,0 +1,18 @@
+[Unit]
+Description=Launchpad Royale cloudflared quick tunnel + Worker registration
+After=royale.service network-online.target
+Wants=network-online.target
+Wants=royale.service
+
+[Service]
+User=z80
+WorkingDirectory=/home/z80/services/royale
+EnvironmentFile=/home/z80/services/royale/.env
+Environment=ROYALE_PORT=18800
+Environment=CLOUDFLARED=/usr/local/bin/cloudflared
+ExecStart=/home/z80/.bun/bin/bun deploy/ophy/tunnel.ts
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
