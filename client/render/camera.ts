@@ -46,7 +46,7 @@ const CORNERS: readonly [number, number][] = [
 ];
 
 export class CameraRig {
-  readonly camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 0.5, 2400);
+  readonly camera = new THREE.PerspectiveCamera(BASE_FOV, 1, 1.5, 2400); // near 1.5: depth precision
   /** Smoothed look-at point (the "focus" used for shadows, fake lights, sky, audio attenuation). */
   readonly target = new THREE.Vector3();
   /** Farthest visible ground point from `target` (m, capped) — sizes the shadow frustum. */

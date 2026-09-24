@@ -54,7 +54,7 @@ function smg(lit: PartBuilder, glow: PartBuilder, accent: THREE.Color): number[]
     // MEV bot "eyes" on both sides of the receiver.
     .sphere(0.024, accent, 0.058, 0.1, 0.2, 0.5, 1, 1, GLOW * 1.2)
     .sphere(0.024, accent, -0.058, 0.1, 0.2, 0.5, 1, 1, GLOW * 1.2)
-    .box(0.1, 0.008, 0.26, accent, 0, 0.192, 0.1, 0, 0, 0, 0, GLOW)
+    .box(0.086, 0.008, 0.26, accent, 0, 0.196, 0.1, 0, 0, 0, 0, GLOW)
     .torus(0.037, 0.006, accent, 0, 0.08, 0.5, 0, 0, 0, GLOW);
   return [0.08, 0.56];
 }
@@ -71,7 +71,7 @@ function shotgun(lit: PartBuilder, glow: PartBuilder, accent: THREE.Color): numb
   glow
     .torus(0.04, 0.008, accent, 0.038, 0.1, 0.72, 0, 0, 0, GLOW)
     .torus(0.04, 0.008, accent, -0.038, 0.1, 0.72, 0, 0, 0, GLOW)
-    .box(0.135, 0.02, 0.2, accent, 0, 0.12, 0.02, 0, 0, 0, 0, GLOW * 0.9);
+    .box(0.14, 0.02, 0.2, accent, 0, 0.12, 0.02, 0, 0, 0, 0, GLOW * 0.9);
   return [0.1, 0.76];
 }
 
@@ -90,7 +90,7 @@ function ar(lit: PartBuilder, glow: PartBuilder, accent: THREE.Color): number[] 
     .torus(0.024, 0.005, accent, 0, 0.215, 0.165, 0, 0, 0, GLOW * 1.3)
     .box(0.004, 0.02, 0.28, accent, 0.049, 0.1, 0.5, 0, 0, 0, 0, GLOW)
     .box(0.004, 0.02, 0.28, accent, -0.049, 0.1, 0.5, 0, 0, 0, 0, GLOW)
-    .box(0.082, 0.02, 0.1, accent, 0, 0.1, -0.4, 0, 0, 0, 0, GLOW * 0.8);
+    .box(0.09, 0.02, 0.1, accent, 0, 0.1, -0.4, 0, 0, 0, 0, GLOW * 0.8);
   return [0.1, 0.97];
 }
 

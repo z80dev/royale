@@ -143,6 +143,7 @@ interface RoadChain {
   points: { x: number; z: number }[];
   width: number;
   closed: boolean;
+  roads: number[]; // indices into map.roads that make up this chain
 }
 
 /** Joins road segments that share endpoints into polylines so joints get proper miters. */
@@ -153,6 +154,7 @@ function chainRoads(roads: Road[]): RoadChain[] {
   for (let i = 0; i < roads.length; i++) {
     if (used[i]) continue;
     used[i] = true;
+    const members = [i];
     const r0 = roads[i]!;
     const pts = [
       { x: r0.x1, z: r0.z1 },
@@ -171,6 +173,7 @@ function chainRoads(roads: Road[]): RoadChain[] {
         else if (same(r.x1, r.z1, head.x, head.z)) pts.unshift({ x: r.x2, z: r.z2 });
         else continue;
         used[j] = true;
+        members.push(j);
         grew = true;
       }
     }
@@ -178,19 +181,45 @@ function chainRoads(roads: Road[]): RoadChain[] {
     const last = pts[pts.length - 1]!;
     const closed = pts.length > 2 && same(first.x, first.z, last.x, last.z);
     if (closed) pts.pop();
-    chains.push({ points: pts, width: r0.w, closed });
+    chains.push({ points: pts, width: r0.w, closed, roads: members });
   }
   return chains;
 }
 
+/** Distance from (x, z) to the nearest road surface edge (negative = on the road). */
+function roadDistance(roads: Road[], x: number, z: number): number {
+  let best = Infinity;
+  for (const r of roads) {
+    const dx = r.x2 - r.x1;
+    const dz = r.z2 - r.z1;
+    const t = Math.max(0, Math.min(1, ((x - r.x1) * dx + (z - r.z1) * dz) / (dx * dx + dz * dz)));
+    best = Math.min(best, Math.hypot(x - r.x1 - dx * t, z - r.z1 - dz * t) - r.w / 2);
+  }
+  return best;
+}
+
+/*
+ * Overlapping road strips (a spoke crossing the ring road) are coplanar, so they must never depth-fight:
+ * - the road mesh draws after the ground (renderOrder 1) without writing depth, so where strips overlap the
+ *   later triangle simply wins — deterministic, no flicker at any camera angle;
+ * - asphalt shading is purely world-space, so both strips would look identical anyway;
+ * - strip-space markings (edge lines, lane dashes, lamp pools) fade out inside any OTHER road's surface and a
+ *   crosswalk is painted just outside it, turning each overlap into a clean junction.
+ */
 function buildRoads(ctx: BuildCtx): void {
-  const { bag } = ctx;
+  const { bag, map } = ctx;
   const positions: number[] = [];
   const uvs: number[] = [];
+  const chainIds: number[] = [];
   const indices: number[] = [];
   const lamps: { x: number; z: number; nx: number; nz: number }[] = [];
   const Y = 0.02;
-  for (const chain of chainRoads(ctx.map.roads)) {
+  const chains = chainRoads(map.roads);
+  const segChain = new Array<number>(map.roads.length).fill(0);
+  chains.forEach((chain, id) => {
+    for (const r of chain.roads) segChain[r] = id;
+  });
+  chains.forEach((chain, chainId) => {
     const pts = chain.closed ? [...chain.points, chain.points[0]!] : chain.points;
     const n = pts.length;
     const half = chain.width / 2;
@@ -228,6 +257,7 @@ function buildRoads(ctx: BuildCtx): void {
       if (i > 0) v += Math.hypot(p.x - pts[i - 1]!.x, p.z - pts[i - 1]!.z);
       positions.push(p.x + nx, Y, p.z + nz, p.x - nx, Y, p.z - nz);
       uvs.push(0, v, 1, v);
+      chainIds.push(chainId, chainId);
       if (i > 0) {
         const a = base + (i - 1) * 2;
         indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); // CCW seen from above
@@ -244,18 +274,17 @@ function buildRoads(ctx: BuildCtx): void {
       const dz = (b.z - a.z) / len;
       for (let s = (((8 - acc) % 16) + 16) % 16; s < len; s += 16) {
         const off = half + 0.45;
-        lamps.push({
-          x: a.x + dx * s - dz * off * side,
-          z: a.z + dz * s + dx * off * side,
-          nx: dz * side,
-          nz: -dx * side,
-        });
+        const lx = a.x + dx * s - dz * off * side;
+        const lz = a.z + dz * s + dx * off * side;
+        // never plant a lamp on another road (junctions)
+        if (roadDistance(map.roads, lx, lz) > 0.4) lamps.push({ x: lx, z: lz, nx: dz * side, nz: -dx * side });
         side = -side;
       }
       acc = (acc + len) % 16;
     }
-  }
+  });
   const geo = bag.track(new THREE.BufferGeometry());
+  geo.setAttribute('roadChain', new THREE.Float32BufferAttribute(chainIds, 1));
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
   geo.setAttribute(
@@ -275,11 +304,45 @@ function buildRoads(ctx: BuildCtx): void {
       polygonOffset: true,
       polygonOffsetFactor: -2,
       polygonOffsetUnits: -2,
+      depthWrite: false,
     }),
   );
+  const segCount = Math.max(1, map.roads.length);
+  const segs = Array.from({ length: segCount }, (_, i) => {
+    const r = map.roads[i];
+    return r ? new THREE.Vector4(r.x1, r.z1, r.x2, r.z2) : new THREE.Vector4(1e5, 1e5, 1e5, 1e5);
+  });
+  const info = Array.from(
+    { length: segCount },
+    (_, i) => new THREE.Vector2((map.roads[i]?.w ?? 0) / 2, segChain[i] ?? -1),
+  );
   patchWorld(mat, {
-    key: 'road',
+    key: `road-${segCount}`,
     ground: true,
+    uniforms: { uRoadSeg: { value: segs }, uRoadInfo: { value: info } },
+    vertexHeader: /* glsl */ `
+      attribute float roadChain;
+      varying float vRoadChain;
+    `,
+    vertex: 'vRoadChain = roadChain;',
+    header: /* glsl */ `
+      #define ROAD_SEGS ${segCount}
+      uniform vec4 uRoadSeg[ROAD_SEGS];
+      uniform vec2 uRoadInfo[ROAD_SEGS];
+      varying float vRoadChain;
+      // signed distance to the nearest road surface belonging to a different chain (negative = inside it)
+      float otherRoad(vec2 p) {
+        float d = 1e5;
+        for (int i = 0; i < ROAD_SEGS; i++) {
+          if (abs(uRoadInfo[i].y - vRoadChain) < 0.5) continue;
+          vec2 a = uRoadSeg[i].xy;
+          vec2 ab = uRoadSeg[i].zw - a;
+          float t = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
+          d = min(d, length(p - a - ab * t) - uRoadInfo[i].x);
+        }
+        return d;
+      }
+    `,
     color: /* glsl */ `
       diffuseColor.rgb *= 0.8 + kitNoise(vWPos.xz * 1.7) * 0.4;
     `,
@@ -293,13 +356,18 @@ function buildRoads(ctx: BuildCtx): void {
         float flow = pow(fract(v / 24.0 - uTime * 0.35), 10.0) * (edge);
         float poolD = fract(v / 16.0 - 0.5) - 0.5;
         float pool = exp(-poolD * poolD * 90.0);
-        totalEmissiveRadiance += vec3(0.05, 0.85, 1.0) * edge * (0.6 + flow * 1.6)
+        float other = otherRoad(vWPos.xz);
+        float keep = smoothstep(0.05, 0.45, other);
+        float zebra = step(0.45, other) * step(other, 1.7) * step(0.5, fract(u * 9.0)) * step(0.12, u) * step(u, 0.88);
+        totalEmissiveRadiance += (vec3(0.05, 0.85, 1.0) * edge * (0.6 + flow * 1.6)
           + vec3(1.0, 0.72, 0.15) * lane * 0.5
-          + vec3(1.0, 0.62, 0.32) * pool * 0.1;
+          + vec3(1.0, 0.62, 0.32) * pool * 0.1) * keep
+          + vec3(0.75, 0.8, 0.9) * zebra * 0.28;
       }
     `,
   });
   const roads = new THREE.Mesh(geo, mat);
+  roads.renderOrder = 1; // after the ground: roads don't write depth (see above)
   roads.receiveShadow = true;
   roads.matrixAutoUpdate = false;
   ctx.root.add(roads);
@@ -328,13 +396,16 @@ function buildBoundary(ctx: BuildCtx): void {
   for (let side = 0; side < 4; side++) {
     const yaw = (side * Math.PI) / 2;
     const p = batch.at(0, 0, yaw);
-    for (let t = -H; t <= H; t += 5) p.box('metal', t, 1.6, H + 0.15, 0.22, 3.2, 0.22, '#262b40');
-    p.box('glow', 0, 1.1, H + 0.15, H * 2, 0.07, 0.07, '#00f0ff', { intensity: 2.6 });
-    p.box('glow', 0, 3.2, H + 0.15, H * 2, 0.09, 0.09, '#ff2bd6', { intensity: 2.8 });
-    // cliff face with glowing strata
-    p.box('rough', 0, -20, OUT, OUT * 2, 40, 0.5, '#0a0b16');
+    // one post per corner (the next side starts at −H), rails reach the corner so the sides join
+    for (let t = -H; t < H - 1; t += 5) p.box('metal', t, 1.6, H + 0.15, 0.22, 3.2, 0.22, '#262b40');
+    p.box('glow', 0, 1.1, H + 0.15, H * 2 + 0.3, 0.07, 0.07, '#00f0ff', { intensity: 2.6 });
+    p.box('glow', 0, 3.2, H + 0.15, H * 2 + 0.3, 0.09, 0.09, '#ff2bd6', { intensity: 2.8 });
+    // Cliff face with glowing strata. It sits just OUTSIDE the ground plane (which ends at ±OUT) with its top a
+    // hair below y=0, so no face is ever coplanar with the ground; even sides are longer to close the corners.
+    const cliffLen = side % 2 === 0 ? OUT * 2 + 1 : OUT * 2;
+    p.box('rough', 0, -20.01, OUT + 0.25, cliffLen, 40, 0.5, '#0a0b16');
     for (let s = 0; s < 5; s++)
-      p.box('glow', 0, -1.5 - s * 5.5, OUT + 0.3, OUT * 2, 0.12, 0.05, s % 2 ? '#7a2bff' : '#00c8ff', {
+      p.box('glow', 0, -1.5 - s * 5.5, OUT + 0.53, cliffLen + 0.1, 0.12, 0.05, s % 2 ? '#7a2bff' : '#00c8ff', {
         intensity: 2.2 - s * 0.35,
       });
   }

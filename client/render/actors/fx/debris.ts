@@ -29,7 +29,10 @@ class DebrisPool {
   private readonly cr: Float32Array;
   private readonly cg: Float32Array;
   private readonly cb: Float32Array;
+  /** Rest height per piece: settled coins/chunks each get their own layer so overlapping ones never z-fight. */
+  private readonly floor: Float32Array;
   private readonly fields: Float32Array[];
+  private serial = 0;
   private readonly euler = new THREE.Euler();
   private readonly quat = new THREE.Quaternion();
   private readonly pos = new THREE.Vector3();
@@ -58,9 +61,10 @@ class DebrisPool {
     this.cr = f();
     this.cg = f();
     this.cb = f();
+    this.floor = f();
     this.fields = [
       this.px, this.py, this.pz, this.vx, this.vy, this.vz, this.rx, this.ry, this.rz, this.wx, this.wy, this.wz,
-      this.age, this.life, this.scale, this.cr, this.cg, this.cb,
+      this.age, this.life, this.scale, this.cr, this.cg, this.cb, this.floor,
     ];
     this.mesh = new THREE.InstancedMesh(geometry, material, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -103,6 +107,7 @@ class DebrisPool {
     this.cr[i] = color.r * intensity;
     this.cg[i] = color.g * intensity;
     this.cb[i] = color.b * intensity;
+    this.floor[i] = 0.03 + (this.serial++ % 16) * 0.003;
   }
 
   clear(): void {
@@ -124,9 +129,9 @@ class DebrisPool {
       this.px[i] += this.vx[i] * dt;
       this.py[i] += this.vy[i] * dt;
       this.pz[i] += this.vz[i] * dt;
-      const grounded = this.py[i] <= 0.04;
-      if (grounded) {
-        this.py[i] = 0.04;
+      const floor = this.floor[i]!;
+      if (this.py[i] <= floor) {
+        this.py[i] = floor;
         if (this.vy[i] < -1.5) {
           this.vy[i] = -this.vy[i] * 0.38;
           this.vx[i] *= 0.55;

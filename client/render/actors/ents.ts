@@ -71,7 +71,7 @@ function turretGeometry(): TurretGeometry {
     .sphere(0.035, secondary, -0.24, 0.64, -0.26, 1, 1, 1, 3.2)
     .torus(0.06, 0.012, secondary, 0.13, 0.04, 0.87, 0, 0, 0, 2.6)
     .torus(0.06, 0.012, secondary, -0.13, 0.04, 0.87, 0, 0, 0, 2.6)
-    .box(0.02, 0.26, 0.4, secondary, 0.315, 0.1, 0, 0, 0, 0, 0, 2);
+    .box(0.02, 0.26, 0.36, secondary, 0.315, 0.1, 0.02, 0, 0, 0, 0, 2);
   turretGeo = { base: base.build(), head: head.build(), headGlow: headGlow.build() };
   return turretGeo;
 }

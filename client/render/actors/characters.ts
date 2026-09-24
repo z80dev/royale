@@ -65,10 +65,10 @@ let eyesGeometry: THREE.BufferGeometry | null = null;
 function sharedBadgeGeometry(): THREE.BufferGeometry {
   if (badgeGeometry) return badgeGeometry;
   const chest = new THREE.PlaneGeometry(0.3, 0.3);
-  chest.translate(0, 0.44, 0.224);
+  chest.translate(0, 0.44, 0.23);
   const back = new THREE.PlaneGeometry(0.34, 0.34);
   back.rotateY(Math.PI);
-  back.translate(0, 0.46, -0.445);
+  back.translate(0, 0.46, -0.45);
   const merged = new THREE.BufferGeometry();
   // Manual merge keeps uv (PartBuilder strips it).
   const pos: number[] = [];
@@ -105,6 +105,10 @@ function badgeMaterial(id: CharacterId): THREE.MeshStandardMaterial {
       roughness: 0.4,
       metalness: 0.1,
       alphaTest: 0.5,
+      // Decal on the chest/back plate: pull toward the camera so it never z-fights at long range.
+      polygonOffset: true,
+      polygonOffsetFactor: -2,
+      polygonOffsetUnits: -2,
     });
     badgeMaterials.set(id, m);
   }
@@ -129,7 +133,7 @@ function buildCharacterGeometry(id: CharacterId): CharacterGeometry {
     .box(0.4, 0.26, 0.28, DARK, 0, 0.2, 0)
     .box(0.64, 0.44, 0.4, primary, 0, 0.44, 0, 0, 0, 0, 0.09)
     .box(0.36, 0.36, 0.04, BLACK, 0, 0.44, 0.2, 0, 0, 0, 0.02)
-    .box(0.52, 0.1, 0.36, plateDark, 0, 0.23, 0.02, 0, 0, 0, 0.04)
+    .box(0.52, 0.1, 0.37, plateDark, 0, 0.23, 0.027, 0, 0, 0, 0.04)
     .cyl(0.15, 0.17, 0.1, DARK, 0, 0.69, 0)
     .box(0.26, 0.14, 0.32, primary, 0.41, 0.6, 0, 0, 0, -0.38, 0.05)
     .box(0.26, 0.14, 0.32, primary, -0.41, 0.6, 0, 0, 0, 0.38, 0.05)

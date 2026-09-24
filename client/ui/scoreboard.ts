@@ -1,4 +1,4 @@
-// Tab scoreboard: teams, alive/dead, kills, ping. Rebuilt at ~4 Hz while held.
+// Tab scoreboard: teams, alive/dead, kills, ping. Re-checked at ~4 Hz while held; rebuilt only when rows change.
 
 import { CHARACTER_BY_ID } from '../../shared/constants';
 import type { RosterEntry } from '../../shared/protocol';
@@ -12,6 +12,7 @@ export class Scoreboard {
   private readonly summary: HTMLElement;
   private shown = false;
   private nextBuild = 0;
+  private builtKey = '';
 
   constructor(private readonly ctx: UiContext) {
     this.body = h('div.sb-body');
@@ -32,6 +33,7 @@ export class Scoreboard {
   setShown(show: boolean): void {
     this.shown = show;
     this.nextBuild = 0;
+    this.builtKey = '';
     toggle(this.el, 'hidden', !show);
   }
 
@@ -58,6 +60,16 @@ export class Scoreboard {
       kills: members.reduce((sum, m) => sum + kills(m.id), 0),
     }));
     teamList.sort((a, b) => Number(b.alive > 0) - Number(a.alive > 0) || b.kills - a.kills || a.team - b.team);
+    // Rebuilding re-creates badge images (visible flicker), so skip when nothing shown has changed.
+    const pingOf = (entry: RosterEntry) => (entry.bot ? -1 : Math.round((this.ctx.ping(entry.id) ?? -10) / 10));
+    const key = JSON.stringify([
+      hud.aliveCount,
+      hud.teamsAlive,
+      this.ctx.roster.size,
+      teamList.map((t) => t.members.map((m) => [m.id, alive(m.id), kills(m.id), pingOf(m)])),
+    ]);
+    if (key === this.builtKey) return;
+    this.builtKey = key;
 
     setText(
       this.summary,

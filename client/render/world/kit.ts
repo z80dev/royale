@@ -124,6 +124,7 @@ export interface PatchOpts {
   color?: string; // GLSL after color_fragment (modify `diffuseColor`)
   emissive?: string; // GLSL after emissivemap_fragment (add to `totalEmissiveRadiance`) — lit only
   header?: string; // extra GLSL declarations for the fragment shader
+  vertexHeader?: string; // extra GLSL declarations for the vertex shader (attributes, varyings)
   uniforms?: Record<string, THREE.IUniform>; // extra uniforms (declare them in `header`)
 }
 
@@ -138,7 +139,7 @@ export function patchWorld<M extends THREE.Material>(mat: M, opts: PatchOpts): M
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, worldUniforms, opts.uniforms);
     let vs = shader.vertexShader;
-    vs = vs.replace('#include <common>', `#include <common>\n${GLSL_COMMON}`);
+    vs = vs.replace('#include <common>', `#include <common>\n${GLSL_COMMON}\n${opts.vertexHeader ?? ''}`);
     let pre = '';
     if (opts.sway) {
       pre += `

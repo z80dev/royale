@@ -418,7 +418,9 @@ export function fresnelOverlayMaterial(color: THREE.Color, opacity: number, dept
         vec4 wp = modelMatrix * vec4(position, 1.0);
         vN = normalize(mat3(modelMatrix) * normal);
         vV = normalize(cameraPosition - wp.xyz);
-        gl_Position = projectionMatrix * viewMatrix * wp;
+        // Same transform order as three's built-in shaders so an overlay drawn on a rig's own geometry lands
+        // on (nearly) identical depths; polygonOffset below absorbs the remaining rounding.
+        gl_Position = projectionMatrix * (modelViewMatrix * vec4(position, 1.0));
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uColor;
@@ -435,5 +437,10 @@ export function fresnelOverlayMaterial(color: THREE.Color, opacity: number, dept
     blending: THREE.AdditiveBlending,
     depthWrite: false,
     depthTest,
+    // Depth-tested overlays share surfaces with the lit rig (hit flash, zone burn, buff tint): bias them toward
+    // the camera so they never z-fight with the body they cover.
+    polygonOffset: depthTest,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -4,
   });
 }

@@ -153,7 +153,7 @@ function buildMonolith(ctx: BuildCtx, o: BoxOb): void {
   p.box('rough', 0, 0.12, 0, w + 0.8, 0.24, d + 0.8, '#1a1b26');
   p.box('glass', 0, o.h / 2 + 0.24, 0, w, o.h, d, '#040408');
   for (const sx of [-1, 1])
-    p.box('glow', sx * (w / 2 + 0.01), o.h / 2 + 0.24, 0, 0.03, o.h, d + 0.02, '#ffb627', { intensity: 2.6 });
+    p.box('glow', sx * (w / 2 + 0.01), o.h / 2 + 0.235, 0, 0.03, o.h - 0.03, d + 0.04, '#ffb627', { intensity: 2.6 });
   p.frame('glow', o.h + 0.25, w + 0.02, d + 0.02, 0.05, 0.03, '#ffb627', { intensity: 2.4 });
   const lines = ['BLOCK 0', ...wrapWords(o.label ?? 'Chancellor on brink of second bailout for banks', 22)];
   const tex = multiLineTexture(ctx.bag, lines, {
@@ -236,7 +236,10 @@ function buildPizzaShop(ctx: BuildCtx, o: BoxOb): void {
   const stripes = 12;
   for (let i = 0; i < stripes; i++) {
     const x = -w / 2 + (i + 0.5) * (w / stripes);
-    p.box('lit', x, 2.75, d / 2 + 0.55, w / stripes, 0.06, 1.25, i % 2 ? '#f2f2f2' : '#d4202a', { rx: 0.35 });
+    const stripeW = (w - 0.04) / stripes;
+    p.box('lit', x * ((w - 0.04) / w), 2.75, d / 2 + 0.58, stripeW, 0.06, 1.25, i % 2 ? '#f2f2f2' : '#d4202a', {
+      rx: 0.35,
+    });
   }
   // neon signs
   const title = neonSign(ctx, "LASZLO'S PIZZA", w * 0.9, '#ff5a2b', { intensity: 2.4, aspect: 6 });
@@ -273,8 +276,8 @@ function buildPizzaShop(ctx: BuildCtx, o: BoxOb): void {
   disc.rotation.x = Math.PI / 2 - 0.9;
   pizza.position.set(o.x, h + 3.3, o.z - 0.6);
   ctx.root.add(pizza);
-  p.cyl('metal', -1.2, h + 1.2, -0.8, 0.1, 2.4, '#333746', undefined, 8);
-  p.cyl('metal', 1.2, h + 1.2, -0.8, 0.1, 2.4, '#333746', undefined, 8);
+  p.cyl('metal', -1.2, h + 1.4, -0.8, 0.1, 2.0, '#333746', undefined, 8); // pizza supports stand on the roof
+  p.cyl('metal', 1.2, h + 1.4, -0.8, 0.1, 2.0, '#333746', undefined, 8);
   // the 10,000 BTC slice floats beside it, spinning
   const sliceGeo = bag.track(new THREE.CylinderGeometry(R * 0.55, R * 0.55, 0.2, 12, 1, false, 0, Math.PI * 0.25));
   const slice = new THREE.Mesh(sliceGeo, pizzaMat);
@@ -374,7 +377,7 @@ function buildRuin(ctx: BuildCtx, o: BoxOb, rng: Rng): void {
       x,
       hh / 2,
       0,
-      len / n + 0.02,
+      len / n, // chunks abut exactly: overlapping neighbours would share side faces and flicker
       hh,
       th * rng.range(0.85, 1.05),
       rng.chance(0.5) ? '#3a3a46' : '#33333f',
@@ -669,7 +672,7 @@ function buildLetter(ctx: BuildCtx, o: BoxOb, mats: THREE.Material[]): void {
   ctx.root.add(mesh);
   const p = ctx.batch.at(o.x, o.z);
   p.box('lit', 0, 0.15, 0, w + 0.3, 0.3, depth + 0.3, '#15161f');
-  p.box('glow', 0, 0.31, depth / 2 + 0.16, w + 0.3, 0.03, 0.03, BTC_ORANGE, { intensity: 2 });
+  p.box('glow', 0, 0.31, depth / 2 + 0.16, w + 0.34, 0.03, 0.03, BTC_ORANGE, { intensity: 2 });
 }
 
 function buildAtm(ctx: BuildCtx, o: BoxOb): void {
@@ -678,7 +681,7 @@ function buildAtm(ctx: BuildCtx, o: BoxOb): void {
   const d = o.hd * 2;
   p.box('lit', 0, 0.55, 0, w, 1.1, d, BTC_ORANGE);
   p.box('metal', 0, 1.55, 0, w, 0.9, d, '#15161f');
-  p.box('lit', 0, 1.93, 0, w + 0.06, 0.14, d + 0.06, BTC_ORANGE);
+  p.box('lit', 0, 1.95, 0, w + 0.06, 0.14, d + 0.06, BTC_ORANGE); // cap overhangs the body top (y 2.0)
   p.box('lit', 0, 1.02, d / 2 + 0.1, w * 0.8, 0.06, 0.25, '#222430', { rx: 0.3 });
   p.box('glow', 0, 0.75, d / 2 + 0.005, w * 0.5, 0.05, 0.01, '#39ff88', { intensity: 2.5 });
   const screen = multiLineTexture(ctx.bag, ['₿ BTC ATM', 'BUY HIGH', 'SELL LOW'], {
@@ -751,7 +754,7 @@ function buildRocket(ctx: BuildCtx, o: CircleOb): void {
     p.add('metal', TPL.cone16, Math.cos(a) * R * 0.4, 1.1, Math.sin(a) * R * 0.4, 0.45, 0.8, 0.45, '#3a3d4c', {
       rx: Math.PI,
     });
-    p.cyl('glow', Math.cos(a) * R * 0.4, 0.72, Math.sin(a) * R * 0.4, 0.34, 0.04, '#ff8a2b', { intensity: 4 }, 16);
+    p.cyl('glow', Math.cos(a) * R * 0.4, 0.76, Math.sin(a) * R * 0.4, 0.34, 0.04, '#ff8a2b', { intensity: 4 }, 16);
   }
   // vertical "TO THE MOON" livery
   const text = neonSign(ctx, o.label ?? 'TO THE MOON', 9, '#ff6b2b', {

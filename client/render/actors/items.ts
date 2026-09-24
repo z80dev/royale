@@ -119,7 +119,7 @@ function consumableModel(id: ConsumableId): ItemModel {
         .cyl(0.045, 0.045, 0.2, col('#b8bfcc'), 0, -0.26, 0.02, 0, 0, Math.PI / 2, 14)
         .box(0.1, 0.08, 0.04, col('#8b92a0'), 0, 0.3, 0, 0, 0, 0, 0.01);
       glow
-        .box(0.11, 0.16, 0.006, col('#dff4ff'), 0, 0.14, 0.037, 0, 0, 0, 0, 1.9)
+        .box(0.11, 0.16, 0.006, col('#dff4ff'), 0, 0.17, 0.039, 0, 0, 0, 0, 1.9)
         .sphere(0.025, accent, 0.09, 0.05, 0, 1, 1, 1, 3)
         .sphere(0.025, accent, -0.09, 0.05, 0, 1, 1, 1, 3)
         .box(0.004, 0.46, 0.074, accent, 0.087, 0, 0, 0, 0, 0, 0, 2.2);
@@ -356,28 +356,36 @@ const CHEST_H = 0.7;
 const CHEST_D = 0.86;
 const CRATE_E = 1.4;
 
+/**
+ * Treasury chest. Every part sits on its own depth layer (≥ 4 mm apart) so nothing is coplanar in any state:
+ * closed, open (interior visible from above) or rug-flipped (bottom visible). Layers, bottom → top:
+ * body 0 · bottom band 0.006 · posts 0.012 … posts 0.688 · top band 0.692 · body top 0.7 · lock 0.71 · treasure 0.716.
+ */
 function chestModels(): { base: ItemModel; lid: ItemModel; closed: THREE.BufferGeometry } {
   const gold = GOLD;
   const hot = FX_COLORS.gold;
   const base = new PartBuilder()
     .box(CHEST_W, CHEST_H, CHEST_D, OBSIDIAN, 0, CHEST_H / 2, 0, 0, 0, 0, 0.05)
-    .box(CHEST_W + 0.04, 0.08, CHEST_D + 0.04, gold, 0, 0.04, 0, 0, 0, 0, 0.02)
-    .box(CHEST_W + 0.04, 0.06, CHEST_D + 0.04, gold, 0, CHEST_H - 0.03, 0, 0, 0, 0, 0.02);
+    .box(CHEST_W + 0.04, 0.08, CHEST_D + 0.04, gold, 0, 0.046, 0, 0, 0, 0, 0.02)
+    .box(CHEST_W + 0.04, 0.064, CHEST_D + 0.04, gold, 0, CHEST_H - 0.04, 0, 0, 0, 0, 0.02);
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1]) {
       const px = sx * (CHEST_W / 2 - 0.02);
       const pz = sz * (CHEST_D / 2 - 0.02);
-      base.box(0.1, CHEST_H, 0.1, gold, px, CHEST_H / 2, pz, 0, 0, 0, 0.02);
+      base.box(0.1, CHEST_H - 0.024, 0.1, gold, px, CHEST_H / 2, pz, 0, 0, 0, 0.02);
     }
   }
   base.box(0.26, 0.3, 0.06, gold, 0, CHEST_H - 0.14, CHEST_D / 2 + 0.02, 0, 0, 0, 0.03);
   const baseGlow = new PartBuilder()
     .box(0.07, 0.11, 0.02, hot, 0, CHEST_H - 0.16, CHEST_D / 2 + 0.055, 0, 0, 0, 0, 3.4)
-    .box(CHEST_W - 0.12, 0.025, 0.02, hot, 0, CHEST_H - 0.07, CHEST_D / 2 + 0.005, 0, 0, 0, 0, 2.4)
-    .box(CHEST_W - 0.12, 0.025, 0.02, hot, 0, CHEST_H - 0.07, -CHEST_D / 2 - 0.005, 0, 0, 0, 0, 2.4)
-    .box(0.02, 0.025, CHEST_D - 0.12, hot, CHEST_W / 2 + 0.005, CHEST_H - 0.07, 0, 0, 0, 0, 0, 2.4)
-    .box(0.02, 0.025, CHEST_D - 0.12, hot, -CHEST_W / 2 - 0.005, CHEST_H - 0.07, 0, 0, 0, 0, 0, 2.4)
-    .box(CHEST_W - 0.2, 0.04, CHEST_D - 0.2, hot, 0, CHEST_H - 0.02, 0, 0, 0, 0, 0, 3);
+    // Glowing seam just under the top band on all four sides.
+    .box(CHEST_W - 0.12, 0.025, 0.02, hot, 0, CHEST_H - 0.09, CHEST_D / 2 + 0.015, 0, 0, 0, 0, 2.4)
+    .box(CHEST_W - 0.12, 0.025, 0.02, hot, 0, CHEST_H - 0.09, -CHEST_D / 2 - 0.015, 0, 0, 0, 0, 2.4)
+    .box(0.02, 0.025, CHEST_D - 0.12, hot, CHEST_W / 2 + 0.015, CHEST_H - 0.09, 0, 0, 0, 0, 0, 2.4)
+    .box(0.02, 0.025, CHEST_D - 0.12, hot, -CHEST_W / 2 - 0.015, CHEST_H - 0.09, 0, 0, 0, 0, 0, 2.4)
+    // Treasure inside (seen when the lid opens): glowing gold floor + coin mound, both above the body top.
+    .box(CHEST_W - 0.2, 0.03, CHEST_D - 0.2, hot, 0, CHEST_H + 0.001, 0, 0, 0, 0, 0, 2.2)
+    .sphere(0.3, hot, 0, CHEST_H, 0, 1.4, 0.25, 0.8, 2.8);
 
   // Lid: half-cylinder vault whose hinge is at its back edge (origin), extending toward +z.
   const r = CHEST_D / 2;
@@ -391,10 +399,15 @@ function chestModels(): { base: ItemModel; lid: ItemModel; closed: THREE.BufferG
     .add(lidShell(r, CHEST_W), OBSIDIAN_EDGE)
     .add(lidShell(r + 0.025, 0.09), gold, 1, 0.42)
     .add(lidShell(r + 0.025, 0.09), gold, 1, -0.42)
-    .add(lidShell(r + 0.025, 0.09), gold, 1, 0);
+    .add(lidShell(r + 0.025, 0.09), gold, 1, 0)
+    // Underside panel closes the open half-cylinder so the raised lid shows a solid inner face instead of
+    // see-through band caps. Lifted 4 mm off the hinge plane so it never touches the body top.
+    .box(CHEST_W - 0.06, 0.02, CHEST_D - 0.06, OBSIDIAN, 0, 0.014, r, 0, 0, 0, 0.008);
   const lidGlow = new PartBuilder()
-    .cyl(0.13, 0.13, 0.02, hot, 0, r + 0.02, r + 0.02, 0, 0, 0, 20, 2.8)
-    .torus(0.13, 0.012, FX_COLORS.white, 0, r + 0.035, r + 0.02, Math.PI / 2, 0, 0, 2.2);
+    .cyl(0.13, 0.13, 0.02, hot, 0, r + 0.03, r, 0, 0, 0, 20, 2.8)
+    .torus(0.13, 0.012, FX_COLORS.white, 0, r + 0.045, r, Math.PI / 2, 0, 0, 2.2)
+    // Gold inlay on the lid's inner face (visible when open), 4 mm below the panel.
+    .box(CHEST_W - 0.3, 0.006, CHEST_D - 0.3, hot, 0, 0.001, r, 0, 0, 0, 0, 1.8);
   const closed = new PartBuilder()
     .box(CHEST_W, CHEST_H, CHEST_D, OBSIDIAN, 0, CHEST_H / 2, 0)
     .add(lidShell(r, CHEST_W), OBSIDIAN, 1, 0, CHEST_H, -r)
@@ -420,9 +433,12 @@ function crateModels(): CrateModels {
   const hot = rarityColor(4);
   const stripe = col('#f2c230');
   const base = new PartBuilder().box(e, e * 0.8, e, CRATE, 0, e * 0.4, 0, 0, 0, 0, 0.06);
+  // Stripes stop 6 mm short of the crate's top/bottom faces (no coplanar caps when the lid slides off or the
+  // crate flips), and the two stripe directions use different overhangs so their outer faces never coincide.
+  const stripeH = e * 0.8 - 0.012;
   for (const sx of [-1, 1]) {
-    base.box(0.1, e * 0.8, e + 0.03, stripe, sx * (e / 2 - 0.12), e * 0.4, 0, 0, 0, 0, 0.02);
-    base.box(e + 0.03, e * 0.8, 0.1, stripe, 0, e * 0.4, sx * (e / 2 - 0.12), 0, 0, 0, 0.02);
+    base.box(0.1, stripeH, e + 0.03, stripe, sx * (e / 2 - 0.12), e * 0.4, 0, 0, 0, 0, 0.02);
+    base.box(e + 0.042, stripeH, 0.1, stripe, 0, e * 0.4, sx * (e / 2 - 0.12), 0, 0, 0, 0.02);
   }
   const baseGlow = new PartBuilder();
   for (let i = 0; i < 4; i++) {
@@ -435,7 +451,7 @@ function crateModels(): CrateModels {
   const lid = new PartBuilder()
     .box(e + 0.06, 0.12, e + 0.06, CRATE, 0, 0.06, 0, 0, 0, 0, 0.03)
     .box(e * 0.6, 0.05, 0.12, stripe, 0, 0.13, 0)
-    .box(0.12, 0.05, e * 0.6, stripe, 0, 0.13, 0);
+    .box(0.12, 0.058, e * 0.6, stripe, 0, 0.134, 0);
   const lidGlow = new PartBuilder().sphere(0.08, col('#ff3b3b'), 0.55, 0.16, 0.55, 1, 1, 1, 3.5);
   // Parachute canopy (alternating gores) + lines; origin at crate top center.
   const canopy = new PartBuilder();

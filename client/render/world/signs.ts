@@ -63,8 +63,9 @@ export function buildBillboards(ctx: BuildCtx): void {
     const p = batch.at(b.x, b.z, b.rot);
     // twin legs, crossbar, emitter rail
     for (const sx of [-1, 1]) {
-      p.box('metal', sx * 2.4, bottom / 2, 0, 0.26, bottom, 0.26, '#252838');
-      p.box('glow', sx * 2.4, bottom / 2, 0.14, 0.04, bottom, 0.02, b.color, { intensity: 1.6 });
+      // legs stop inside the crossbar so their tops are never coplanar with its top
+      p.box('metal', sx * 2.4, (bottom - 0.1) / 2, 0, 0.26, bottom - 0.1, 0.26, '#252838');
+      p.box('glow', sx * 2.4, (bottom - 0.1) / 2, 0.14, 0.04, bottom - 0.1, 0.02, b.color, { intensity: 1.6 });
       p.box('rough', sx * 2.4, 0.15, 0, 0.7, 0.3, 0.7, '#1c1e2a');
     }
     p.box('metal', 0, bottom - 0.15, 0, PANEL_W + 0.4, 0.3, 0.4, '#252838');

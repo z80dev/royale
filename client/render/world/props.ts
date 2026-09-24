@@ -315,7 +315,7 @@ function buildBarriers(ctx: BuildCtx, list: BoxOb[]): void {
     const th = (alongX ? b.hd : b.hw) * 2;
     p.box('rough', 0, b.h * 0.18, 0, len, b.h * 0.36, th * 1.25, '#3a3d52');
     p.box('rough', 0, b.h * 0.64, 0, len, b.h * 0.56, th * 0.8, '#454860');
-    p.box('glow', 0, b.h + 0.02, 0, len - 0.1, 0.06, th * 0.3, '#ffd23f', { intensity: 2.4 });
+    p.box('glow', 0, b.h * 0.92 + 0.02, 0, len - 0.1, 0.06, th * 0.3, '#ffd23f', { intensity: 2.4 }); // on top
     for (let s = -len / 2 + 0.4; s < len / 2 - 0.2; s += 0.9) {
       p.box('glow', s, b.h * 0.2, th * 0.63, 0.35, 0.12, 0.02, '#ff2b6d', { intensity: 1.6 });
       p.box('glow', s, b.h * 0.2, -th * 0.63, 0.35, 0.12, 0.02, '#ff2b6d', { intensity: 1.6 });
@@ -331,12 +331,13 @@ function buildWalls(ctx: BuildCtx, list: BoxOb[]): void {
     const len = (alongX ? w.hw : w.hd) * 2;
     const th = (alongX ? w.hd : w.hw) * 2;
     p.box('lit', 0, w.h / 2, 0, len, w.h, th, '#1a1c2c');
-    p.box('glow', 0, w.h + 0.03, 0, len, 0.07, th + 0.04, color, { intensity: 2.2 });
-    p.box('glow', 0, 0.08, th / 2 + 0.01, len, 0.05, 0.02, color, { intensity: 1.8 });
-    p.box('glow', 0, 0.08, -th / 2 - 0.01, len, 0.05, 0.02, color, { intensity: 1.8 });
+    // trims overhang the wall ends by 1 cm so their end caps never share a plane with the wall's
+    p.box('glow', 0, w.h + 0.03, 0, len + 0.02, 0.07, th + 0.04, color, { intensity: 2.2 });
+    p.box('glow', 0, 0.08, th / 2 + 0.01, len + 0.02, 0.05, 0.02, color, { intensity: 1.8 });
+    p.box('glow', 0, 0.08, -th / 2 - 0.01, len + 0.02, 0.05, 0.02, color, { intensity: 1.8 });
     // panel seams
     for (let s = -len / 2 + 1.5; s < len / 2; s += 1.5)
-      p.box('lit', s, w.h / 2, 0, 0.06, w.h * 0.98, th + 0.04, '#2a2d44');
+      p.box('lit', s, w.h / 2, 0, 0.06, w.h * 0.98, th + 0.03, '#2a2d44'); // not flush with the base strips
   }
 }
 

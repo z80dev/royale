@@ -123,6 +123,9 @@ export class LobbyScreen {
   private tipTimer = 0;
   private fillDragging = false;
   private boardKey = '';
+  private playersKey = '';
+  private teamsKey = '';
+  private readonly pingEls = new Map<string, HTMLElement>();
 
   constructor(private readonly ctx: UiContext) {
     const storedChar = storageGet('lr.char') as CharacterId | null;
@@ -457,6 +460,10 @@ export class LobbyScreen {
   private renderTeams(msg: LobbyMsg | null): void {
     const teamSize = msg?.settings.teamSize ?? 1;
     const players = msg?.players ?? [];
+    // Lobby broadcasts arrive ~1/s; only rebuild the buttons when something visible changed (no flicker).
+    const key = JSON.stringify([teamSize, msg?.settings.fillTo, this.team, players.map((p) => p.team)]);
+    if (key === this.teamsKey) return;
+    this.teamsKey = key;
     this.teamRow.replaceChildren();
     if (teamSize <= 1) {
       toggle(this.teamRow, 'hidden', true);
@@ -518,9 +525,31 @@ export class LobbyScreen {
       this.playerCount,
       `${msg.players.length} human${msg.players.length === 1 ? '' : 's'} · bots fill to ${msg.settings.fillTo}`,
     );
+    // Lobby broadcasts arrive ~1/s (pings change every time). Rebuilding rows re-creates the badge images and
+    // restarts row animations, which flickers — so rebuild only on structural changes and patch pings in place.
+    const key = JSON.stringify([
+      this.ctx.welcomeId,
+      msg.settings.teamSize,
+      msg.settings.fillTo,
+      msg.settings.botSkill,
+      msg.players.map((p) => [p.id, p.name, p.character, p.team, p.ready, p.host]),
+    ]);
+    if (key === this.playersKey) {
+      for (const p of msg.players) {
+        const ping = this.pingEls.get(p.id);
+        if (!ping) continue;
+        setText(ping, `${Math.round(p.ping)}ms`);
+        ping.className = `ping ${p.ping < 60 ? 'good' : p.ping < 130 ? 'ok' : 'bad'}`;
+      }
+      return;
+    }
+    this.playersKey = key;
+    this.pingEls.clear();
     const rows = msg.players.map((p) => {
       const pingClass = p.ping < 60 ? 'good' : p.ping < 130 ? 'ok' : 'bad';
       const brand = CHARACTER_BY_ID[p.character]?.name ?? '';
+      const ping = h(`span.ping.${pingClass}`, { text: `${Math.round(p.ping)}ms` });
+      this.pingEls.set(p.id, ping);
       return h(
         `div.player-row${p.id === this.ctx.welcomeId ? '.me' : ''}${p.ready ? '.ready' : ''}`,
         { style: `--brand:${CHARACTER_BY_ID[p.character]?.primary ?? '#fff'}` },
@@ -533,7 +562,7 @@ export class LobbyScreen {
             text: msg.settings.teamSize > 1 ? `${brand} · ${p.team ? `Team ${p.team}` : 'Auto'}` : brand,
           }),
         ),
-        h(`span.ping.${pingClass}`, { text: `${Math.round(p.ping)}ms` }),
+        ping,
         h('span.ready-tag', { text: p.ready ? 'READY ✓' : 'not ready' }),
       );
     });

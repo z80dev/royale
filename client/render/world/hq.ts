@@ -118,13 +118,15 @@ function buildTower(ctx: BuildCtx, t: BoxOb, index: number, geos: HqGeos): void 
   }
   for (const sx of [-1, 1]) {
     for (const sz of [-1, 1])
-      p.box('glow', sx * (w / 2 + 0.04), h / 2, sz * (d / 2 + 0.04), 0.12, h, 0.12, primary, { intensity: 1.7 });
+      p.box('glow', sx * (w / 2 + 0.04), h / 2 - 0.01, sz * (d / 2 + 0.04), 0.12, h - 0.02, 0.12, primary, {
+        intensity: 1.7,
+      });
   }
   p.frame('glow', h + 0.52, w + 0.34, d + 0.34, 0.1, 0.06, primary, { intensity: 2.2 });
   // entrance
   p.box('glow', 0, 1.3, d / 2 + 0.03, 1.8, 2.4, 0.03, '#dff8ff', { intensity: 1.4 });
   p.box('lit', 0, 2.75, d / 2 + 0.6, 3.2, 0.14, 1.2, '#1a1d2e');
-  p.box('glow', 0, 2.67, d / 2 + 1.2, 3.2, 0.04, 0.04, primary, { intensity: 3 });
+  p.box('glow', 0, 2.665, d / 2 + 1.215, 3.24, 0.04, 0.04, primary, { intensity: 3 }); // proud of the canopy edges
 
   // badge on all four faces near the top (one merged mesh per tower)
   const logoSize = logoSizeFor(w, d);
@@ -169,7 +171,7 @@ function buildTower(ctx: BuildCtx, t: BoxOb, index: number, geos: HqGeos): void 
       glow: primary,
     });
     const site = signPlane(bag, siteTex, w * 0.7, w * 0.7 * (128 / 1024), '#ffffff', 1.3);
-    site.position.set(0, 2.95, d / 2 + 1.22);
+    site.position.set(0, 2.95, d / 2 + 1.25); // in front of the canopy trim (z d/2+1.22)
     const holder = new THREE.Group();
     holder.position.set(t.x, 0, t.z);
     holder.rotation.y = facing;
