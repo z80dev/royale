@@ -209,7 +209,21 @@ export function findInteractTarget(match: Match, p: Player): InteractTarget {
   return best;
 }
 
-export function interact(match: Match, p: Player): void {
+/** Extra reach for the target the client was prompted for (its predicted position runs ahead of ours). */
+const HINT_SLACK = 1.5;
+
+export function interact(match: Match, p: Player, hint: { loot?: number; chest?: number } = {}): void {
+  const reach2 = (PICKUP_RADIUS + HINT_SLACK) ** 2;
+  const hinted = hint.loot !== undefined ? match.loot.get(hint.loot) : undefined;
+  if (hinted?.k === 'weapon' && (hinted.x - p.move.x) ** 2 + (hinted.z - p.move.z) ** 2 <= reach2) {
+    pickupWeapon(match, p, hinted);
+    return;
+  }
+  const hintedChest = hint.chest !== undefined ? match.chests.get(hint.chest) : undefined;
+  if (hintedChest && !hintedChest.open && (hintedChest.x - p.move.x) ** 2 + (hintedChest.z - p.move.z) ** 2 <= reach2) {
+    openChest(match, p, hintedChest);
+    return;
+  }
   const target = findInteractTarget(match, p);
   if (!target) return;
   if (target.kind === 'chest') openChest(match, p, target.chest);

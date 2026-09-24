@@ -525,7 +525,7 @@ export class Match implements BotWorld {
         startReload(this, p);
         break;
       case 'interact':
-        if (!p.leap) interact(this, p);
+        if (!p.leap) interact(this, p, act);
         break;
       case 'slot':
         if (act.v === 0 || act.v === 1) this.switchSlot(p, act.v);

@@ -72,6 +72,10 @@ const input = new InputController({
   phase: () => state.phase,
   isDead: () => state.phase === 'playing' && !state.self,
   unlockAudio: () => audio.unlock(),
+  interactHint: () => ({
+    ...(state.self?.nearLoot != null ? { loot: state.self.nearLoot } : {}),
+    ...(state.self?.nearChest != null ? { chest: state.self.nearChest } : {}),
+  }),
 });
 net = new Net(handleServerMessage);
 

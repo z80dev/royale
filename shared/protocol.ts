@@ -213,6 +213,10 @@ export type ClientMsg =
       v?: number; // slot index for 'slot'
       x?: number; // world aim point for 'ability'
       z?: number;
+      // 'interact': the loot / chest the client was prompted for (SelfSnap.nearLoot / nearChest). The server honors
+      // it with a little extra reach, since the client's view of its own position runs slightly ahead of the server.
+      loot?: number;
+      chest?: number;
     }
   | { t: 'deploy'; x: number; z: number } // choose / change landing target during deploy phase
   | { t: 'spectate'; dir: 1 | -1 } // cycle spectate target when dead

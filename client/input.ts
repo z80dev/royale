@@ -9,6 +9,8 @@ export interface InputDeps {
   phase(): Phase;
   isDead(): boolean;
   unlockAudio(): void;
+  /** The loot / chest the server is currently prompting E for (sent with the interact so a lagged E still lands). */
+  interactHint(): { loot?: number; chest?: number };
 }
 
 export interface SampledInput {
@@ -38,24 +40,10 @@ export class InputController {
   private pendingDash = false;
   private konami = '';
   private scoreboardOpen = false;
-  /**
-   * Invisible textarea that holds keyboard focus while you play. Keyboard-driven extensions (Vimium, Surfingkeys, …)
-   * swallow plain letter keys (d scrolls, r reloads, x closes the tab!) unless an editable element is focused, so we
-   * park focus here. Lives outside #ui, so ui.wantsKeyboard() ignores it.
-   */
-  private readonly sink: HTMLTextAreaElement;
+  /** `?keys` in the URL shows a live key-event log (for "my WASD doesn't work" reports). */
+  private readonly keyLog = new URLSearchParams(location.search).has('keys') ? new KeyLog() : null;
 
   constructor(private readonly deps: InputDeps) {
-    this.sink = document.createElement('textarea');
-    this.sink.className = 'key-sink';
-    this.sink.tabIndex = -1;
-    this.sink.setAttribute('aria-hidden', 'true');
-    for (const attr of ['autocomplete', 'autocorrect', 'autocapitalize', 'spellcheck']) this.sink.setAttribute(attr, 'off');
-    this.sink.style.cssText =
-      'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;margin:0;'
-      + 'resize:none;overflow:hidden;pointer-events:none;caret-color:transparent;';
-    this.sink.addEventListener('input', () => (this.sink.value = ''));
-    document.body.append(this.sink);
     addEventListener('keydown', this.keyDown);
     addEventListener('keyup', this.keyUp);
     addEventListener('blur', this.blur);
@@ -73,7 +61,7 @@ export class InputController {
     removeEventListener('mousedown', this.mouseDown);
     removeEventListener('mouseup', this.mouseUp);
     removeEventListener('wheel', this.wheel);
-    this.sink.remove();
+    this.keyLog?.el.remove();
   }
 
   sample(): SampledInput {
@@ -81,7 +69,7 @@ export class InputController {
       this.release();
       return { mx: 0, mz: 0, fire: false, dash: false };
     }
-    this.keepKeyboard();
+    this.keyLog?.render(this.held);
     const sample = {
       mx: Number(this.held.has('right')) - Number(this.held.has('left')),
       mz: Number(this.held.has('down')) - Number(this.held.has('up')),
@@ -91,15 +79,6 @@ export class InputController {
     this.pendingDash = false;
     this.pendingFire = false;
     return sample;
-  }
-
-  /** Re-park focus on the sink whenever nothing that needs the keyboard (chat, name field, slider…) has it. */
-  private keepKeyboard(): void {
-    const active = document.activeElement;
-    if (active === this.sink || !document.hasFocus()) return;
-    if (!active || active === document.body || active instanceof HTMLButtonElement || active instanceof HTMLCanvasElement) {
-      this.sink.focus({ preventScroll: true });
-    }
   }
 
   private showScoreboard(show: boolean): void {
@@ -117,10 +96,9 @@ export class InputController {
   }
 
   private readonly keyDown = (event: KeyboardEvent): void => {
+    this.keyLog?.push(event);
     this.deps.unlockAudio();
     if (event.metaKey || event.ctrlKey || event.altKey || this.deps.wantsKeyboard()) return;
-    // Keep the sink empty; keys are game input, not text. (Enter/Tab/Escape still reach their window listeners.)
-    if (event.target === this.sink && event.key.length === 1) event.preventDefault();
     const key = event.key.toLowerCase();
     if (key === 'tab' || key === ' ' || key.startsWith('arrow')) event.preventDefault();
     if (!event.repeat) {
@@ -153,26 +131,28 @@ export class InputController {
       return;
     }
     if (event.repeat || this.deps.phase() !== 'playing' || this.deps.isDead()) return;
-    switch (key) {
-      case 'r': this.deps.send({ t: 'act', a: 'reload' }); break;
-      case 'e': this.deps.send({ t: 'act', a: 'interact' }); break;
-      case 'x': this.deps.send({ t: 'act', a: 'drop' }); break;
-      case '1':
-      case '2': this.deps.send({ t: 'act', a: 'slot', v: Number(key) - 1 }); break;
-      case '3': this.deps.send({ t: 'act', a: 'stable' }); break;
-      case '4': this.deps.send({ t: 'act', a: 'medkit' }); break;
-      case 'q': {
+    // Action keys by physical position too (matches WASD on non-QWERTY layouts).
+    switch (event.code) {
+      case 'KeyR': this.deps.send({ t: 'act', a: 'reload' }); break;
+      case 'KeyE': this.deps.send({ t: 'act', a: 'interact', ...this.deps.interactHint() }); break;
+      case 'KeyX': this.deps.send({ t: 'act', a: 'drop' }); break;
+      case 'Digit1':
+      case 'Digit2': this.deps.send({ t: 'act', a: 'slot', v: event.code === 'Digit1' ? 0 : 1 }); break;
+      case 'Digit3': this.deps.send({ t: 'act', a: 'stable' }); break;
+      case 'Digit4': this.deps.send({ t: 'act', a: 'medkit' }); break;
+      case 'KeyQ': {
         const ground = this.deps.pickGround(this.mouseX, this.mouseY);
         this.deps.send({ t: 'act', a: 'ability', x: ground.x, z: ground.z });
         break;
       }
-      case '5':
-      case '6':
-      case '7':
-      case '8':
-      case '9':
-      case '0': {
-        const i = key === '0' ? 5 : Number(key) - 5;
+      case 'Digit5':
+      case 'Digit6':
+      case 'Digit7':
+      case 'Digit8':
+      case 'Digit9':
+      case 'Digit0': {
+        const digit = Number(event.code.slice(5));
+        const i = digit === 0 ? 5 : digit - 5;
         if (i < EMOTES.length) this.deps.send({ t: 'emote', i });
         break;
       }
@@ -180,6 +160,7 @@ export class InputController {
   };
 
   private readonly keyUp = (event: KeyboardEvent): void => {
+    this.keyLog?.push(event);
     const move = MOVE_BY_CODE[event.code];
     if (move) this.held.delete(move);
     if (event.key === 'Tab') this.showScoreboard(false);
@@ -195,10 +176,10 @@ export class InputController {
   private readonly mouseDown = (event: MouseEvent): void => {
     this.deps.unlockAudio();
     if (event.button !== 0 || this.deps.pointerOverUi(event)) return;
-    // Clicking the game world hands the keyboard back to the game (after typing a name, chatting, or an extension
-    // like Vimium stole focus). preventDefault keeps the browser from moving focus back to <body> afterwards.
-    event.preventDefault();
-    this.sink.focus({ preventScroll: true });
+    // Clicking the game world hands the keyboard back to the game (e.g. after typing a name or chatting).
+    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
     if (this.deps.phase() === 'deploy') {
       const point = this.deps.pickGround(event.clientX, event.clientY);
       this.deps.send({ t: 'deploy', x: point.x, z: point.z });
@@ -218,4 +199,41 @@ export class InputController {
     event.preventDefault();
     this.deps.send({ t: 'act', a: 'swap' });
   };
+}
+
+/** Debug overlay (`?keys`): the last key events as the game sees them, plus the currently held directions. */
+class KeyLog {
+  readonly el = document.createElement('pre');
+  private readonly lines: string[] = [];
+  private heldText = '';
+
+  constructor() {
+    this.el.style.cssText =
+      'position:fixed;left:8px;bottom:8px;z-index:99999;margin:0;padding:8px 10px;max-width:520px;'
+      + 'background:rgba(0,0,0,.8);color:#7CFF4F;font:11px/1.4 ui-monospace,monospace;pointer-events:none;';
+    document.body.append(this.el);
+  }
+
+  push(event: KeyboardEvent): void {
+    const active = document.activeElement;
+    const focus = active ? `${active.tagName.toLowerCase()}${active.className ? `.${active.className}` : ''}` : '-';
+    const mods = `${event.metaKey ? '⌘' : ''}${event.ctrlKey ? '⌃' : ''}${event.altKey ? '⌥' : ''}`;
+    this.lines.push(
+      `${event.type.padEnd(7)} key=${JSON.stringify(event.key)} code=${event.code} ${mods}`
+        + `${event.repeat ? ' repeat' : ''}${event.isComposing ? ' composing' : ''} focus=${focus}`,
+    );
+    if (this.lines.length > 12) this.lines.shift();
+    this.flush();
+  }
+
+  render(held: ReadonlySet<string>): void {
+    const text = [...held].join(',') || 'none';
+    if (text === this.heldText) return;
+    this.heldText = text;
+    this.flush();
+  }
+
+  private flush(): void {
+    this.el.textContent = `held: ${this.heldText || 'none'}\n${this.lines.join('\n')}`;
+  }
 }

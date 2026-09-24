@@ -77,6 +77,8 @@ export function parseClientMsg(raw: string | Buffer): ClientMsg | null {
         msg.x = clampNum(data.x, -MAX_COORD, MAX_COORD);
         msg.z = clampNum(data.z, -MAX_COORD, MAX_COORD);
       }
+      if (finite(data.loot) && Number.isInteger(data.loot) && data.loot >= 0) msg.loot = data.loot;
+      if (finite(data.chest) && Number.isInteger(data.chest) && data.chest >= 0) msg.chest = data.chest;
       return msg;
     }
     case 'join': {
