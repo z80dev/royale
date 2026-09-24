@@ -25,6 +25,13 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - run: bun run build:pages
+      # GitHub Pages caches assets for 10 min; version the URLs so a reload always gets the new client.
+      - name: Version asset URLs
+        run: |
+          JS=$(sha256sum public/dist/main.js | cut -c1-12)
+          CSS=$(sha256sum public/style.css | cut -c1-12)
+          sed -i "s#\./dist/main\.js\"#./dist/main.js?v=$JS\"#; s#\./style\.css\"#./style.css?v=$CSS\"#" public/index.html
+          grep -E 'main\.js\?v=|style\.css\?v=' public/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

@@ -590,7 +590,7 @@ export class LobbyScreen {
 }
 
 const MANUAL_KEYS: [string, string][] = [
-  ['WASD', 'move'],
+  ['WASD / ↑↓←→', 'move'],
   ['LMB', 'fire'],
   ['Space', 'dash'],
   ['Q', 'ability'],

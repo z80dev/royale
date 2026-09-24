@@ -5,7 +5,7 @@ import type { UiContext } from './context';
 import { h, setText, storageGet, storageSet, toggle } from './dom';
 
 const CONTROLS: [string, string][] = [
-  ['WASD', 'Move'],
+  ['WASD / Arrows', 'Move'],
   ['Mouse', 'Aim'],
   ['LMB', 'Fire'],
   ['Space / Shift', 'Dash'],
@@ -20,7 +20,8 @@ const CONTROLS: [string, string][] = [
   ['M', 'Big map'],
   ['Enter', 'Chat'],
   ['5 – 0', 'Emotes'],
-  ['← / →', 'Cycle spectate'],
+  ['← / → · A / D', 'Cycle spectate (dead)'],
+  ['F', 'Ready up (lobby)'],
 ];
 
 const GEAR_PATH = [
