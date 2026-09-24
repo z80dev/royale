@@ -8,18 +8,34 @@ import type { ActCmd, BotWorld, Player, WeaponSlot } from '../types';
 import { NavGrid, type Waypoint } from './nav';
 
 interface Plan { x: number; z: number }
-interface MatchBots { nav: NavGrid; landings: Map<number, Plan> }
+interface MatchBots {
+  nav: NavGrid;
+  landings: Map<number, Plan>;
+  /** bot player id → id of the enemy it is currently engaging (for pack-focus limits). */
+  targets: Map<string, string>;
+}
 const matches = new WeakMap<BotWorld, MatchBots>();
-const SIGHT_RANGE = [28, 34, 40] as const;
+const SIGHT_RANGE = [22, 28, 36] as const;
 /** Human-like reaction to a newly seen target… */
-const REACTION_DELAY = [0.45, 0.3, 0.18] as const;
+const REACTION_DELAY = [0.7, 0.45, 0.25] as const;
 /** …plus time to settle the crosshair before the first shot. */
-const SETTLE_DELAY = [0.9, 0.55, 0.3] as const;
-const AIM_ERROR = [0.21, 0.1, 0.045] as const;
+const SETTLE_DELAY = [1.2, 0.7, 0.35] as const;
+const AIM_ERROR = [0.34, 0.17, 0.07] as const;
 /** Percent of half-second windows in which the bot deliberately whiffs (aim pulled well off target). */
-const WHIFF_CHANCE = [28, 10, 0] as const;
+const WHIFF_CHANCE = [45, 20, 5] as const;
 const WHIFF_OFFSET = 0.32;
-const DODGE_CHANCE = [35, 60, 83] as const;
+const DODGE_CHANCE = [10, 35, 70] as const;
+/** Fraction of the target's velocity the bot leads by (Paper Hands aims where you ARE, so strafing works). */
+const LEAD = [0.2, 0.6, 1] as const;
+/** Burst discipline: fraction of each BURST_WINDOW a bot keeps the trigger down. */
+const FIRE_DUTY = [0.5, 0.7, 0.95] as const;
+const BURST_WINDOW = 1;
+/** Seconds a bot holds fire after its target dashes (it lost track of them). */
+const DASH_FLINCH = [0.6, 0.35, 0] as const;
+/** A bot picks another target when this many other bots already focus the same human. */
+const PACK_LIMIT = [2, 3, Infinity] as const;
+/** Below this HP a bot under fire breaks off to heal (Paper Hands stays in and can be finished off). */
+const RETREAT_HP = [28, 40, 45] as const;
 /**
  * Seconds after landing (includes the server's 3s landing grace) during which bots loot instead of hunting;
  * they only fight back against whoever is shooting them.
@@ -30,7 +46,9 @@ const LANDING_SPACING = 48;
 
 /** Build the shared grid once after map generation, before any bot thinks. */
 export function prepareBots(world: BotWorld): void {
-  if (!matches.has(world)) matches.set(world, { nav: new NavGrid(world.map), landings: new Map() });
+  if (!matches.has(world)) {
+    matches.set(world, { nav: new NavGrid(world.map), landings: new Map(), targets: new Map() });
+  }
 }
 
 function hash(text: string): number {
@@ -133,6 +151,8 @@ export class BotBrain {
   private acts = 0;
   /** `fire` sent with the previous input (semi-automatic weapons need a fresh press per shot). */
   private lastFire = false;
+  /** No firing until this time (flinch after the target dashed). */
+  private holdFireUntil = 0;
   private readonly ignoredWeapons = new Map<WeaponId, number>();
 
   constructor(private readonly world: BotWorld, private readonly player: Player) {
@@ -205,7 +225,7 @@ export class BotBrain {
     let goalZ = z;
     let moving = false;
     const combat = !!visible;
-    const low = p.hp < 45;
+    const low = p.hp < RETREAT_HP[world.skill];
     const escape = low && (combat || recentlyHit);
     if (zoneUrgent && (outNow || !combat)) {
       const centerDistance = Math.max(0.001, nextDistance);
@@ -283,9 +303,12 @@ export class BotBrain {
     if (needsSwitch) this.act({ t: 'act', a: 'slot', v: otherIndex });
     if (visible && active) {
       const def = WEAPONS[active.w];
-      const travel = Math.min(0.45, distance / def.projectileSpeed);
+      const travel = Math.min(0.45, distance / def.projectileSpeed) * LEAD[world.skill];
       const predictedX = visible.move.x + this.velocityX * travel;
       const predictedZ = visible.move.z + this.velocityZ * travel;
+      if (visible.move.dashT > 0) this.holdFireUntil = now + DASH_FLINCH[world.skill];
+      const burstPhase = ((now + this.phaseOffset / 30) % BURST_WINDOW) / BURST_WINDOW;
+      const trigger = burstPhase < FIRE_DUTY[world.skill] && now >= this.holdFireUntil;
       const error = AIM_ERROR[world.skill];
       const drift = error * (Math.sin(now * 1.9 + this.phaseOffset) * 0.65 +
         Math.sin(now * 0.72 + this.phaseOffset * 2.3) * 0.35);
@@ -294,7 +317,8 @@ export class BotBrain {
       aim = Math.atan2(predictedZ - z, predictedX - x) + drift + whiff;
       const response = REACTION_DELAY[world.skill] + SETTLE_DELAY[world.skill];
       const safeRocket = active.w !== 'rocket' || distance >= 7;
-      fire = now - this.seenSince >= response && !needsSwitch && (!p.channel || p.hp < 75 || recentlyHit) &&
+      fire = trigger && now - this.seenSince >= response && !needsSwitch &&
+        (!p.channel || p.hp < 75 || recentlyHit) &&
         p.reloadT <= 0 && active.mag > 0 && distance <= def.range - 1 && safeRocket &&
         hasLineOfSight(world.map, x, z, visible.move.x, visible.move.z) &&
         hasLineOfSight(world.map, x, z, predictedX, predictedZ) &&
@@ -362,7 +386,7 @@ export class BotBrain {
     const p = this.player;
     const reach = range ?? SIGHT_RANGE[this.world.skill];
     if (reach <= 0) {
-      this.targetId = null;
+      this.releaseTarget();
       return null;
     }
     let nearest: Player | null = null;
@@ -381,15 +405,21 @@ export class BotBrain {
         if (ally.alive && ally.team === p.team && ally.lastHurtBy === candidate.id &&
           now - ally.lastHurtAt < 3) { supporting = true; break; }
       }
-      const priority = d * (supporting ? 0.6 : 1);
+      let priority = d * (supporting ? 0.6 : 1);
+      const swarmed = !candidate.bot && candidate.id !== this.targetId &&
+        this.packSize(candidate.id) >= PACK_LIMIT[this.world.skill];
+      if (swarmed) {
+        priority *= 9; // others already swarm this human: prefer someone else unless they're much closer
+      }
       if (priority < best) { best = priority; nearest = candidate; }
     }
     if (!nearest) {
-      if (now - this.observedAt > 0.3) this.targetId = null;
+      if (now - this.observedAt > 0.3) this.releaseTarget();
       return null;
     }
     if (nearest.id !== this.targetId || now - this.observedAt > 0.35) {
       this.targetId = nearest.id;
+      this.match.targets.set(p.id, nearest.id);
       this.seenSince = now;
       this.velocityX = 0;
       this.velocityZ = 0;
@@ -426,6 +456,21 @@ export class BotBrain {
       goal = { x: this.observedX, z: this.observedZ };
     }
     return goal;
+  }
+
+  private releaseTarget(): void {
+    this.targetId = null;
+    this.match.targets.delete(this.player.id);
+  }
+
+  /** Living bots (other than this one) currently engaging `targetId`. */
+  private packSize(targetId: string): number {
+    let n = 0;
+    for (const [botId, target] of this.match.targets) {
+      if (target !== targetId || botId === this.player.id) continue;
+      if (this.world.playerById(botId)?.alive) n++;
+    }
+    return n;
   }
 
   private rememberThreat(x: number, z: number, at: number): void {
@@ -588,6 +633,8 @@ export class BotBrain {
 
   private useAbility(enemy: Player | null, distance: number, underFire: boolean, now: number): void {
     if (now - this.lastAbilityAt < 0.5) return;
+    // Paper Hands never opens on a human with turrets / grenades / buffs — only reacts once shot at.
+    if (this.world.skill === 0 && enemy && !enemy.bot && !underFire) return;
     const p = this.player;
     const kind = CHARACTER_BY_ID[p.character].ability.kind;
     let targetX = p.move.x;

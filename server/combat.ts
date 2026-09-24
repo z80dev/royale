@@ -21,6 +21,9 @@ export function isHittable(p: Player): boolean {
 
 // ───────────────────────────── Damage ─────────────────────────────
 
+/** Damage multiplier for bot attackers vs human-owned victims, by bot skill (paper hands / degen / whale). */
+const BOT_VS_HUMAN_DAMAGE = [0.5, 0.75, 1] as const;
+
 /**
  * Deal damage (armor absorbs first). Emits the `hit` event and hands off to
  * match.killPlayer on death. Returns the damage actually dealt.
@@ -38,7 +41,11 @@ export function applyDamage(
 ): number {
   if (match.phase !== 'playing' || match.graceT > 0 || !victim.alive || amount <= 0) return 0;
   if (victim.invulnT > 0) return 0;
-  const dmg = Math.max(1, Math.round(amount));
+  // Difficulty handicap: real bots hit human-owned players softer (bot-vs-bot unchanged so matches resolve).
+  // Bot turrets aim perfectly, so they carry the handicap twice.
+  let handicap = attacker?.bot && attacker.ai && !victim.bot ? BOT_VS_HUMAN_DAMAGE[match.skill] : 1;
+  if (cause === 'turret') handicap *= handicap;
+  const dmg = Math.max(1, Math.round(amount * handicap));
   let absorbed = 0;
   if (victim.ar > 0) {
     absorbed = Math.min(victim.ar, dmg);
