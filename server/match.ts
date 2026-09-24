@@ -426,7 +426,7 @@ export class Match implements BotWorld {
     this.graceT = LANDING_GRACE;
     this.announce(
       `MARKET OPENS IN ${LANDING_GRACE}s`,
-      `${this.players.length} degens landed · loot up, weapons unlock at the opening bell`,
+      'WASD / arrows move · mouse aim + click shoot · Space dash · E loot · Q ability',
       '#FFB627',
     );
     if (this.teamsAlive() <= 1) this.finish(this.lastTeamStanding());

@@ -70,7 +70,7 @@ lives in the settings gear (persisted per browser).
 
 | Key | Action |
 | --- | --- |
-| WASD / mouse | move / aim |
+| WASD or arrows / mouse | move / aim (click the game world if typing somewhere) |
 | LMB | fire |
 | Space / Shift | dash |
 | Q | brand ability (aimed at cursor) |

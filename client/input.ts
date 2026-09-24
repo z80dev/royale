@@ -22,9 +22,15 @@ const KONAMI = '↑↑↓↓←→←→BA';
 const SYMBOL_BY_KEY: Record<string, string> = {
   arrowup: '↑', arrowdown: '↓', arrowleft: '←', arrowright: '→', b: 'B', a: 'A',
 };
+// Movement uses physical key positions (event.code) so WASD works on AZERTY/Dvorak too; arrows also move.
+type MoveDir = 'up' | 'down' | 'left' | 'right';
+const MOVE_BY_CODE: Record<string, MoveDir> = {
+  KeyW: 'up', KeyS: 'down', KeyA: 'left', KeyD: 'right',
+  ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
+};
 
 export class InputController {
-  private readonly held = new Set<string>();
+  private readonly held = new Set<MoveDir>();
   mouseX = innerWidth / 2;
   mouseY = innerHeight / 2;
   private fire = false;
@@ -59,8 +65,8 @@ export class InputController {
       return { mx: 0, mz: 0, fire: false, dash: false };
     }
     const sample = {
-      mx: Number(this.held.has('d')) - Number(this.held.has('a')),
-      mz: Number(this.held.has('s')) - Number(this.held.has('w')),
+      mx: Number(this.held.has('right')) - Number(this.held.has('left')),
+      mz: Number(this.held.has('down')) - Number(this.held.has('up')),
       fire: (this.fire || this.pendingFire) && this.deps.phase() === 'playing',
       dash: this.pendingDash,
     };
@@ -104,17 +110,17 @@ export class InputController {
       this.showScoreboard(true);
       return;
     }
-    if (this.deps.isDead() && (key === 'a' || key === 'arrowleft' || key === 'd' || key === 'arrowright')) {
-      if (!event.repeat) this.deps.send({ t: 'spectate', dir: key === 'a' || key === 'arrowleft' ? -1 : 1 });
+    const move = MOVE_BY_CODE[event.code];
+    if (this.deps.isDead() && (move === 'left' || move === 'right')) {
+      if (!event.repeat) this.deps.send({ t: 'spectate', dir: move === 'left' ? -1 : 1 });
       return;
     }
-    if (key === 'w' || key === 'a' || key === 's' || key === 'd') {
-      this.held.add(key);
+    if (move) {
+      this.held.add(move);
       return;
     }
     if (key === 'shift' || key === ' ') {
       if (!event.repeat && this.deps.phase() === 'playing') this.pendingDash = true;
-      this.held.add(key);
       return;
     }
     if (event.repeat || this.deps.phase() !== 'playing' || this.deps.isDead()) return;
@@ -145,9 +151,9 @@ export class InputController {
   };
 
   private readonly keyUp = (event: KeyboardEvent): void => {
-    const key = event.key.toLowerCase();
-    this.held.delete(key);
-    if (key === 'tab') this.showScoreboard(false);
+    const move = MOVE_BY_CODE[event.code];
+    if (move) this.held.delete(move);
+    if (event.key === 'Tab') this.showScoreboard(false);
   };
 
   private readonly blur = (): void => this.release();
@@ -160,10 +166,14 @@ export class InputController {
   private readonly mouseDown = (event: MouseEvent): void => {
     this.deps.unlockAudio();
     if (event.button !== 0 || this.deps.pointerOverUi(event)) return;
+    // Clicking the game world must hand the keyboard back to the game (e.g. after typing a name or chatting).
+    if (document.activeElement instanceof HTMLElement && document.activeElement !== document.body) {
+      document.activeElement.blur();
+    }
     if (this.deps.phase() === 'deploy') {
       const point = this.deps.pickGround(event.clientX, event.clientY);
       this.deps.send({ t: 'deploy', x: point.x, z: point.z });
-    } else if (this.deps.phase() === 'playing' && !this.deps.isDead() && !this.deps.wantsKeyboard()) {
+    } else if (this.deps.phase() === 'playing' && !this.deps.isDead()) {
       this.fire = true;
       this.pendingFire = true;
     }
