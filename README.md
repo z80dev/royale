@@ -13,20 +13,16 @@ for 90 s.
 ```mermaid
 flowchart LR
   B[browser<br/>z80.wtf/royale] -- static --> P[GitHub Pages]
-  B -- wss /ws --> W[Worker<br/>royale.z80.workers.dev]
-  W -- passthrough --> Q[cloudflared quick tunnel<br/>*.trycloudflare.com]
-  Q --> S[bun server on ophy<br/>127.0.0.1:18800]
+  B -- wss /ws --> T[Cloudflare tunnel<br/>royale.botcade.xyz]
+  T --> S[bun server on ophy<br/>127.0.0.1:18800]
 ```
 
-- **Frontend**: `.github/workflows/pages.yml` runs `bun run build:pages` (bakes in `wss://royale.z80.workers.dev/ws`)
+- **Frontend**: `.github/workflows/pages.yml` runs `bun run build:pages` (bakes in `wss://royale.botcade.xyz/ws`)
   and publishes `public/` on every push to `main`. `?server=wss://…/ws` overrides the backend for testing.
-- **Worker** (`deploy/worker`): stable front door. The backend registers its current quick-tunnel origin with
-  `POST /register` (bearer `REGISTER_SECRET`, stored in KV); `/ws` and `/health` are passed through to it.
-  Deploy: `cd deploy/worker && bunx wrangler deploy`.
 - **Backend on ophy** (`~/services/royale`): systemd `royale.service` (game server) and `royale-tunnel.service`
-  (`deploy/ophy/tunnel.ts`: runs the quick tunnel, registers it, health-checks it and restarts on failure). The
-  register secret lives in `~/services/royale/.env` (`ROYALE_REGISTER_SECRET=…`). Update after pushing:
-  `ssh ophy '~/services/royale/deploy/ophy/update.sh'` (restarting the server ends a live match).
+  (named tunnel `royale`, config `deploy/ophy/tunnel.yml`, credentials in `~/.cloudflared/` on ophy).
+  Update after pushing: `ssh ophy '~/services/royale/deploy/ophy/update.sh'` (restarting the server ends a live
+  match). Health: `https://royale.botcade.xyz/health`.
 - Logs: `ssh ophy 'journalctl -u royale -u royale-tunnel -f'`.
 
 ## Local play / dev

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "bun build client/main.ts --outdir public/dist --target browser --minify --sourcemap=linked",
-    "build:pages": "bun build client/main.ts --outdir public/dist --target browser --minify --sourcemap=linked --define LR_SERVER_URL='\"wss://royale.z80.workers.dev/ws\"'",
+    "build:pages": "bun build client/main.ts --outdir public/dist --target browser --minify --sourcemap=linked --define LR_SERVER_URL='\"wss://royale.botcade.xyz/ws\"'",
     "start": "bun run build && bun server/index.ts",
     "dev": "bun build client/main.ts --outdir public/dist --target browser --sourcemap=linked --watch & bun --watch server/index.ts",
     "tunnel": "cloudflared tunnel --url http://localhost:${PORT:-3000}",

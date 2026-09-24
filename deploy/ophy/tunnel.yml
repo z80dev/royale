@@ -1,0 +1,9 @@
+# Named Cloudflare tunnel "royale" → the game server. DNS: royale.botcade.xyz (CNAME to this tunnel).
+# Credentials live only on ophy (created by `cloudflared tunnel create royale`).
+tunnel: 69155c7c-3af7-4ca1-b503-43fc0a8686fc
+credentials-file: /home/z80/.cloudflared/69155c7c-3af7-4ca1-b503-43fc0a8686fc.json
+no-autoupdate: true
+ingress:
+  - hostname: royale.botcade.xyz
+    service: http://127.0.0.1:18800
+  - service: http_status:404
