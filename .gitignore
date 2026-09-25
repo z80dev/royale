@@ -35,3 +35,9 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 
 # wrangler local state
 .wrangler
+
+# promo films: captured footage, renders, capture scratch
+films/*/footage/
+output/
+films/*/capture/recordings/
+films/*/capture/dist/

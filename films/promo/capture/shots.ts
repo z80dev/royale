@@ -1,0 +1,677 @@
+// Shot list for the promo footage. Times are recording seconds (see analyze.ts); moments are clip-local seconds.
+// Recordings: r1–r4 = 24-player solo rounds, Whale bots (record.ts). Landmarks sit at fixed map positions:
+// Satoshi (0,0) · pizza (29,0) · lambo (14.5,25.1) · FTX (−14.5,25.1) · doge (−29,0) · hashrate (−14.5,−25.1)
+// · HODL (14.5,−25.1) · rocket (80,80) · Mt. Gox (−80,80) · tulips (−80,−80) · Luna (80,−80). Moon toward (−x,−z).
+
+import type { CamSpec } from './prelude';
+
+export interface Clip {
+  name: string;
+  /** Recording name in capture/recordings (without .ndjson). */
+  rec: string;
+  /** Recording time (s) of the first captured frame. */
+  start: number;
+  dur: number;
+  ui: boolean;
+  description: string;
+  /** Player id the client plays as (HUD, death screen, results); null = seatless spectator; default p1 (host). */
+  you?: string | null;
+  /** Spectate/follow schedule while "you" is dead or null: [recording s, player id]. */
+  focus?: [number, string][];
+  cam?: CamSpec;
+  noShake?: boolean;
+  /** Capture via composited page screenshots even without UI (the raw WebGL readback path stalls on `city`). */
+  screenshot?: boolean;
+  /** Stop feeding recorded messages after this recording time (s) — holds the lobby for long flyovers. */
+  feedUntil?: number;
+  preroll?: number;
+  /** false = switch to the clip camera on the first captured frame instead of during the pre-roll. */
+  camPreroll?: boolean;
+  css?: string;
+  /** Lobby brand-select montage: from recording s, the host switches brand every `every` s through `brands`. */
+  brandCycle?: { from: number; every: number; brands: string[] };
+  moments?: { t: number; what: string }[];
+  autoMoments?: boolean;
+  /** Auto-moment filter: only events within this many metres of the subject (default 40). */
+  momentRadius?: number;
+  /** Auto-moment subject point (x, z) instead of the focus player. */
+  subjectPoint?: [number, number];
+}
+
+type Vec = [number, number, number];
+
+/** Close cinematic follow on the focus player. */
+const close = (yaw = 90, extra: Partial<Extract<CamSpec, { mode: 'follow' }>> = {}): CamSpec => ({
+  mode: 'follow',
+  dist: 19,
+  pitch: 36,
+  yaw,
+  yawSpeed: 5,
+  fov: 42,
+  rate: 4,
+  lookY: 1.2,
+  ...extra,
+});
+/** Game-like steep follow, ~40% tighter than the in-game framing. */
+const tight = (yaw = 90, extra: Partial<Extract<CamSpec, { mode: 'follow' }>> = {}): CamSpec => ({
+  mode: 'follow',
+  dist: 24,
+  pitch: 56,
+  yaw,
+  yawSpeed: 3,
+  fov: 40,
+  rate: 4,
+  lookY: 1,
+  ...extra,
+});
+/** Medium follow, a bit higher, for fights that spread out. */
+const medium = (yaw = 90, extra: Partial<Extract<CamSpec, { mode: 'follow' }>> = {}): CamSpec => ({
+  mode: 'follow',
+  dist: 30,
+  pitch: 46,
+  yaw,
+  yawSpeed: 4,
+  fov: 42,
+  rate: 3.5,
+  lookY: 1,
+  ...extra,
+});
+const orbit = (center: Vec, radius: number, height: number, yaw: number, yawSpeed: number, extra: Partial<Extract<CamSpec, { mode: 'orbit' }>> = {}): CamSpec => ({
+  mode: 'orbit',
+  center,
+  radius,
+  height,
+  yaw,
+  yawSpeed,
+  fov: 40,
+  ...extra,
+});
+const path = (keys: [number, Vec, Vec, number?][], extra: Partial<Extract<CamSpec, { mode: 'path' }>> = {}): CamSpec => ({
+  mode: 'path',
+  keys: keys.map(([t, pos, look, fov]) => (fov === undefined ? { t, pos, look } : { t, pos, look, fov })),
+  ...extra,
+});
+
+/** Lobby backdrop (empty neon city, no players): recorded lobby held still. */
+const LOBBY = { rec: 'r1', start: 4, feedUntil: 8, ui: false, noShake: true } as const;
+
+export const SHOTS: Clip[] = [
+  // ───────────── establishing / city ─────────────
+  {
+    name: 'city',
+    ...LOBBY,
+    screenshot: true,
+    dur: 14,
+    description: 'Establishing flyover part 1/2 (continues seamlessly in city-2) of the neon city (empty lobby world): in over the moon-rocket launchpad, across Uniswap HQ, down to the Satoshi statue in Genesis Plaza, then a rise toward the ₿ moon.',
+    cam: path([
+      [0, [150, 38, 136], [80, 16, 80], 46],
+      [7, [118, 20, 112], [78, 14, 78], 44],
+      [14, [66, 26, 48], [18, 6, 12], 46],
+      [21, [24, 14, 20], [0, 4, 0], 46],
+      [28, [-6, 38, 34], [-46, 26, -48], 50],
+    ]),
+    moments: [
+      { t: 0, what: 'high approach, rocket launchpad centre frame' },
+      { t: 7, what: 'passing the moon rocket' },
+      { t: 14, what: 'over Uniswap/Doppler HQs heading to Genesis Plaza' },
+    ],
+    autoMoments: false,
+  },
+  {
+    name: 'city-2',
+    ...LOBBY,
+    screenshot: true,
+    dur: 14,
+    start: 18,
+    description: 'Establishing flyover part 2/2 (continues city exactly) of the neon city (empty lobby world): in over the moon-rocket launchpad, across Uniswap HQ, down to the Satoshi statue in Genesis Plaza, then a rise toward the ₿ moon.',
+    cam: path([
+      [-14, [150, 38, 136], [80, 16, 80], 46],
+      [-7, [118, 20, 112], [78, 14, 78], 44],
+      [0, [66, 26, 48], [18, 6, 12], 46],
+      [7, [24, 14, 20], [0, 4, 0], 46],
+      [14, [-6, 38, 34], [-46, 26, -48], 50],
+    ]),
+    moments: [
+      { t: 0, what: 'over Uniswap/Doppler HQs heading to Genesis Plaza' },
+      { t: 7, what: 'Satoshi statue close' },
+      { t: 13, what: 'rise toward the ₿ moon' },
+    ],
+    autoMoments: false,
+  },
+  {
+    name: 'city-b',
+    ...LOBBY,
+    dur: 12,
+    description: "The game's own lobby orbit over the whole city: HQ beacons, skyline, sky whale.",
+    moments: [{ t: 0, what: 'slow orbit of the whole map' }],
+    autoMoments: false,
+  },
+  {
+    name: 'city-c',
+    rec: 'r1',
+    start: 60,
+    dur: 10,
+    ui: false,
+    you: null,
+    focus: [[0, 'p10']],
+    noShake: true,
+    description: 'High wide slow orbit over the live match: 15+ players fighting across the city, tracers everywhere.',
+    cam: orbit([0, 0, 0], 120, 95, 60, 3, { fov: 45 }),
+    autoMoments: false,
+    moments: [{ t: 0, what: 'whole match from above, fights in several districts' }],
+  },
+  {
+    name: 'whale',
+    ...LOBBY,
+    dur: 8,
+    description: 'Sky whale ("WHALE ALERT") gliding over the skyline, camera on the street tilting up.',
+    cam: path(
+      [
+        [0, [-26, 9, -20], [0, -3, 0], 46],
+        [8, [-20, 7, -26], [0, -3, 0], 46],
+      ],
+      { track: 'whale', ride: true },
+    ),
+    moments: [{ t: 0, what: 'whale fills upper frame' }],
+    autoMoments: false,
+  },
+
+  {
+    name: 'whale-b',
+    ...LOBBY,
+    dur: 8,
+    description: 'Sky whale from the other side, riding alongside above the skyline.',
+    cam: path(
+      [
+        [0, [24, 6, 20], [0, -2, 0], 46],
+        [8, [28, 4, 14], [0, -2, 0], 46],
+      ],
+      { track: 'whale', ride: true },
+    ),
+    moments: [{ t: 0, what: 'whale overhead' }],
+    autoMoments: false,
+  },
+  {
+    name: 'mev',
+    ...LOBBY,
+    dur: 6,
+    description: 'MEV-bot drone hauling a sandwich over the neon streets — camera flies alongside.',
+    cam: path(
+      [
+        [0, [5, 1.5, 6], [0, -0.5, 0], 48],
+        [6, [6, 2.5, 3], [0, -0.5, 0], 48],
+      ],
+      { track: 'drone0', ride: true },
+    ),
+    moments: [{ t: 0, what: 'MEV drone with sandwich centre frame' }],
+    autoMoments: false,
+  },
+  // ───────────── landmarks (clean lobby world) ─────────────
+  {
+    name: 'satoshi',
+    ...LOBBY,
+    dur: 6,
+    description: 'Satoshi Nakamoto statue in Genesis Plaza — slow low orbit.',
+    cam: orbit([0, 0, 0], 15, 3, 70, 9, { lookY: 3.8, fov: 42 }),
+    moments: [{ t: 0, what: 'statue centre frame' }],
+    autoMoments: false,
+  },
+  {
+    name: 'lambo',
+    ...LOBBY,
+    dur: 6,
+    description: 'Golden "WEN LAMBO" — low slow orbit.',
+    cam: orbit([14.5, 0, 25.1], 7.5, 2.2, 40, 12, { lookY: 0.6, fov: 40 }),
+    moments: [{ t: 0, what: 'golden lambo centre frame' }],
+    autoMoments: false,
+  },
+  {
+    name: 'pizza',
+    ...LOBBY,
+    dur: 6,
+    description: "Laszlo's Pizza (10,000 BTC) — slow push-in orbit.",
+    cam: orbit([29, 0, 0], 16, 4.5, 64, 7, { lookY: 2.2, fov: 42, radiusSpeed: -0.8 }),
+    moments: [{ t: 0, what: 'pizza shop centre frame' }],
+    autoMoments: false,
+  },
+  {
+    name: 'hodl',
+    ...LOBBY,
+    dur: 6,
+    description: 'HODL letters + BTC ATMs — slow orbit.',
+    cam: orbit([14.5, 0, -25.1], 12, 3, 100, 6, { lookY: 1.6, fov: 42 }),
+    moments: [{ t: 0, what: 'HODL letters' }],
+    autoMoments: false,
+  },
+  {
+    name: 'rocket',
+    ...LOBBY,
+    dur: 7,
+    description: 'Moon rocket on The Launchpad — crane up from the pad to the nose with the ₿ moon behind.',
+    cam: path([
+      [0, [102, 6, 108], [80, 8, 80], 48],
+      [7, [104, 9, 110], [80, 22, 80], 44],
+    ]),
+    moments: [{ t: 0, what: 'rocket base' }, { t: 6, what: 'rocket nose + moon' }],
+    autoMoments: false,
+  },
+  {
+    name: 'luna',
+    ...LOBBY,
+    dur: 6,
+    description: 'Luna crash site — slow orbit around the crashed moon.',
+    cam: orbit([80, 0, -80], 19, 6, 120, 8, { lookY: 3, fov: 42 }),
+    moments: [{ t: 0, what: 'crashed Luna centre frame' }],
+    autoMoments: false,
+  },
+  {
+    name: 'doge',
+    ...LOBBY,
+    dur: 6,
+    description: 'Doge Park statue ("much wow") — slow orbit.',
+    cam: orbit([-29, 0, 0], 12, 3, 75, 5, { lookY: 2.6, fov: 42 }),
+    moments: [{ t: 0, what: 'doge statue' }],
+    autoMoments: false,
+  },
+  {
+    name: 'ftx',
+    ...LOBBY,
+    dur: 6,
+    description: 'FTX ruins — slow orbit.',
+    cam: orbit([-14.5, 0, 25.1], 13, 4, 90, 8, { lookY: 1.5, fov: 42 }),
+    moments: [{ t: 0, what: 'FTX ruins' }],
+    autoMoments: false,
+  },
+  {
+    name: 'gox',
+    ...LOBBY,
+    dur: 6,
+    description: 'Mt. Gox crater (850,000 BTC vault) — slow orbit.',
+    cam: orbit([-80, 0, 80], 20, 8, 45, 4, { lookY: 1, fov: 42 }),
+    moments: [{ t: 0, what: 'Mt. Gox crater' }],
+    autoMoments: false,
+  },
+  {
+    name: 'tulips',
+    ...LOBBY,
+    dur: 6,
+    description: 'Tulip Mania field — slow low orbit.',
+    cam: orbit([-80, 0, -80], 18, 4, 30, 7, { lookY: 0.8, fov: 42 }),
+    moments: [{ t: 0, what: 'tulip field' }],
+    autoMoments: false,
+  },
+
+  // ───────────── lobby UI ─────────────
+  {
+    name: 'select',
+    rec: 'r1',
+    start: 1.0,
+    dur: 7.5,
+    ui: true,
+    description: 'Lobby UI: character select — the host flips through all 10 launchpad brands (hero panel + ability), players join in the list.',
+    brandCycle: { from: 1.5, every: 0.65, brands: ['doppler', 'uniswap', 'pons', 'long', 'jump', 'fomo', 'pump', 'clanker', 'zora', 'bankr'] },
+    moments: [
+      { t: 0.5, what: 'Doppler selected' },
+      { t: 1.15, what: 'Uniswap' },
+      { t: 1.8, what: 'Pons' },
+      { t: 2.45, what: 'Long' },
+      { t: 3.1, what: 'Jump' },
+      { t: 3.75, what: 'Fomo' },
+      { t: 4.4, what: 'Pump' },
+      { t: 5.05, what: 'Clanker' },
+      { t: 5.7, what: 'Zora' },
+      { t: 6.35, what: 'Bankr' },
+    ],
+    autoMoments: false,
+  },
+  {
+    name: 'select-b',
+    rec: 'r1',
+    start: 5.6,
+    dur: 8,
+    ui: true,
+    description: 'Lobby UI: everyone readies up (ready count ticks up), countdown to launch.',
+    moments: [
+      { t: 0, what: 'players readying' },
+      { t: 3, what: 'all ready → countdown starts' },
+      { t: 7.9, what: 'launch' },
+    ],
+    autoMoments: false,
+  },
+
+  // ───────────── deploy ─────────────
+  {
+    name: 'skydive',
+    rec: 'r1',
+    start: 13.7,
+    dur: 6,
+    ui: false,
+    you: null,
+    focus: [[0, 'p1']],
+    noShake: true,
+    description: 'The drop: all 24 players leave the launch point together and fan out across the sky over the city.',
+    cam: path([
+      [0, [100, 76, 16], [84, 67, 4], 55],
+      [2.5, [92, 70, 18], [66, 56, 4], 55],
+      [6, [72, 58, 20], [36, 38, 3], 55],
+    ]),
+    moments: [{ t: 0.2, what: 'cluster of 24 skydivers' }, { t: 2.5, what: 'fanning out' }],
+    autoMoments: false,
+  },
+  {
+    name: 'skydive-b',
+    rec: 'r1',
+    start: 14.5,
+    dur: 8,
+    ui: false,
+    you: 'p1',
+    description: 'Deploy camera riding down with doppler.lol (Doppler) toward Genesis Plaza, others falling around.',
+    moments: [{ t: 0, what: 'falling over the city' }],
+    autoMoments: false,
+  },
+  {
+    name: 'skydive-ui',
+    rec: 'r1',
+    start: 13.7,
+    dur: 8,
+    ui: true,
+    you: 'p1',
+    description: 'Deploy with UI: landing-map picker + altitude, falling toward the city.',
+    moments: [{ t: 0, what: 'deploy UI appears' }],
+    autoMoments: false,
+  },
+  {
+    name: 'landing',
+    rec: 'r1',
+    start: 21.4,
+    dur: 6,
+    ui: false,
+    you: null,
+    focus: [[0, 'p8']],
+    noShake: true,
+    description: 'Players parachute down onto The Launchpad beside the moon rocket and touch down.',
+    cam: path([
+      [0, [100, 4, 104], [82, 16, 84], 50],
+      [6, [98, 3, 101], [82, 4, 84], 48],
+    ]),
+    moments: [{ t: 4.2, what: 'touchdown (everyone lands together)' }],
+    autoMoments: false,
+  },
+
+  // ───────────── combat ─────────────
+  {
+    name: 'combat',
+    rec: 'r1',
+    start: 36,
+    dur: 8,
+    ui: false,
+    you: null,
+    focus: [[0, 'b4']],
+    cam: tight(100),
+    description: 'Opening firefight: Long brand bot in a multi-way fight, abilities popping as the market opens.',
+  },
+  {
+    name: 'combat-b',
+    rec: 'r2',
+    start: 37,
+    dur: 8,
+    ui: false,
+    you: null,
+    focus: [[0, 'b9']],
+    cam: tight(80),
+    description: 'Firefight around a Pump brand bot — tracers, explosions.',
+  },
+  {
+    name: 'combat-c',
+    rec: 'r3',
+    start: 44.5,
+    dur: 7,
+    ui: false,
+    you: null,
+    focus: [[0, 'p8']],
+    cam: tight(110),
+    description: 'Close combat with a Jump player.',
+  },
+  {
+    name: 'combat-d',
+    rec: 'r4',
+    start: 116,
+    dur: 7,
+    ui: false,
+    you: null,
+    focus: [[0, 'b8']],
+    cam: tight(60),
+    description: 'Late-game fight around a Zora bot.',
+  },
+  {
+    name: 'combat-ui',
+    rec: 'r1',
+    start: 36,
+    dur: 8,
+    ui: true,
+    you: 'b4',
+    description: 'Gameplay with full HUD (health, weapons, minimap, kill feed) from a Long bot in the opening firefight.',
+  },
+
+  // ───────────── abilities ─────────────
+  {
+    name: 'clanker',
+    rec: 'r2',
+    start: 35.8,
+    dur: 4.5,
+    ui: false,
+    you: null,
+    focus: [[0, 'b10']],
+    cam: orbit([33, 0, -56], 10, 11, 215, 7, { lookY: 0.8, fov: 44 }),
+    subjectPoint: [33, -56],
+    description: 'Clanker deploys its auto turret beside Zora HQ; the turret shreds a Jump player.',
+  },
+  {
+    name: 'orb',
+    rec: 'r1',
+    start: 36.5,
+    dur: 4.5,
+    ui: false,
+    you: null,
+    focus: [[0, 'b7']],
+    cam: orbit([-24, 0, -63], 10, 9, -50, 7, { lookY: 1, fov: 44 }),
+    subjectPoint: [-24, -63],
+    description: 'Zora orb shield dome blocking bullets.',
+  },
+  {
+    name: 'sendit',
+    rec: 'r3',
+    start: 36.2,
+    dur: 4,
+    ui: false,
+    you: null,
+    focus: [[0, 'p8']],
+    cam: orbit([-35, 0, 20.5], 11, 9, 60, 7, { lookY: 1, fov: 44 }),
+    subjectPoint: [-35, 20.5],
+    description: 'Jump "Send It": leap over walls with a landing shockwave.',
+  },
+  {
+    name: 'pump',
+    rec: 'r3',
+    start: 86,
+    dur: 4,
+    ui: false,
+    you: null,
+    focus: [[0, 'p4']],
+    cam: orbit([14.7, 0, -68], 13, 12, -10, 7, { lookY: 0.5, fov: 46 }),
+    subjectPoint: [14.7, -68],
+    description: 'Pump & Dump bomb lobbed — explosion.',
+  },
+  {
+    name: 'doppler',
+    rec: 'r1',
+    start: 41.2,
+    dur: 4,
+    ui: false,
+    you: null,
+    focus: [[0, 'b3']],
+    cam: orbit([-33, 0, -48], 11, 10, 45, 7, { lookY: 1, fov: 44 }),
+    subjectPoint: [-33, -48],
+    description: 'Doppler Shift: blink with sonic boom.',
+  },
+  {
+    name: 'pool',
+    rec: 'r3',
+    start: 50.2,
+    dur: 4.5,
+    ui: false,
+    you: null,
+    focus: [[0, 'b12']],
+    cam: orbit([2, 0, -52], 11, 10, 80, 7, { lookY: 1, fov: 44 }),
+    subjectPoint: [2, -52],
+    description: 'Uniswap liquidity pool (healing pool) dropped mid-fight.',
+  },
+
+  // ───────────── rug / airdrop / legendaries ─────────────
+  {
+    name: 'rugged',
+    rec: 'r1',
+    start: 28.4,
+    dur: 4,
+    ui: false,
+    you: null,
+    focus: [[0, 'b1']],
+    cam: orbit([-3.5, 0, 0.8], 10, 6, 180, 8, { lookY: 1.5, fov: 46 }),
+    subjectPoint: [-3.5, 0.8],
+    description: 'Treasury chest turns out to be a rug — explosion in Genesis Plaza next to the Satoshi statue.',
+  },
+  {
+    name: 'rugged-ui',
+    rec: 'r1',
+    start: 27.8,
+    dur: 5,
+    ui: true,
+    you: 'b1',
+    description: 'Opening a rug chest with HUD on — "RUGGED" callout.',
+  },
+  {
+    name: 'airdrop',
+    rec: 'r2',
+    start: 88.5,
+    dur: 7.5,
+    ui: false,
+    you: null,
+    focus: [[0, 'b2']],
+    noShake: true,
+    subjectPoint: [0.7, -42],
+    description: 'Legendary airdrop crate falling out of the sky and slamming down.',
+    cam: path([
+      [0, [-14, 3, -30], [0.7, 50, -42], 50],
+      [7.5, [-12, 2.5, -33], [0.7, 2, -42], 46],
+    ]),
+    moments: [{ t: 7.1, what: 'crate lands' }],
+  },
+  {
+    name: 'printer',
+    rec: 'r2',
+    start: 104,
+    dur: 8,
+    ui: true,
+    you: 'b2',
+    description: 'HUD on: grabbing the Money Printer legendary from the airdrop, then printing kills (TRIPLE TOP streak).',
+  },
+  {
+    name: 'printer-b',
+    rec: 'r2',
+    start: 104.6,
+    dur: 7,
+    ui: false,
+    you: null,
+    focus: [[0, 'b2']],
+    description: 'Money Printer legendary picked up and fired (clean, game camera).',
+  },
+  {
+    name: 'laser',
+    rec: 'r4',
+    start: 122.2,
+    dur: 4,
+    ui: false,
+    you: null,
+    focus: [[0, 'b2']],
+    cam: orbit([50, 0, 1], 16, 14, 80, 4, { fov: 50 }),
+    momentRadius: 60,
+    description: 'Laser Eyes legendary beam kill.',
+  },
+  {
+    name: 'laser-b',
+    rec: 'r1',
+    start: 67.4,
+    dur: 4.5,
+    ui: false,
+    you: null,
+    focus: [[0, 'b8']],
+    cam: orbit([32, 0, 25], 17, 16, 90, 4, { fov: 50 }),
+    momentRadius: 60,
+    description: 'Laser Eyes legendary: pons bot lasering a Zora player ("rugged").',
+  },
+
+  // ───────────── zone ─────────────
+  {
+    name: 'zone',
+    rec: 'r1',
+    start: 137,
+    dur: 8,
+    ui: false,
+    you: null,
+    focus: [[0, 'b10']],
+    noShake: true,
+    subjectPoint: [13, 19],
+    description: 'The Liquidation Zone wall sweeping across the city.',
+    cam: path([
+      [0, [95, 30, 60], [30, 4, 10], 48],
+      [8, [88, 26, 48], [25, 4, 8], 48],
+    ]),
+  },
+
+  // ───────────── UI moments ─────────────
+  {
+    name: 'killfeed',
+    rec: 'r1',
+    start: 166.5,
+    dur: 8,
+    ui: true,
+    you: 'p10',
+    description: 'HUD on: Laser Eyes kills, kill feed + "TRIPLE TOP!" killstreak banner.',
+  },
+  {
+    name: 'killfeed-b',
+    rec: 'r1',
+    start: 95.5,
+    dur: 7,
+    ui: true,
+    you: 'p6',
+    description: 'HUD on: Fomo player on a streak — kill feed + killstreak banner.',
+  },
+  {
+    name: 'ngmi',
+    rec: 'r1',
+    start: 67.8,
+    dur: 8,
+    ui: true,
+    you: 'b12',
+    description: 'NGMI_Ned gets rugged by a Laser Eyes beam — NGMI death screen.',
+  },
+  {
+    name: 'winner',
+    rec: 'r1',
+    start: 217.5,
+    dur: 12,
+    ui: true,
+    you: 'p10',
+    description: 'Final kill, then the WINNER WINNER LAMBO DINNER results screen with podium + confetti.',
+  },
+  {
+    name: 'winner-b',
+    rec: 'r1',
+    start: 219,
+    dur: 8,
+    ui: false,
+    you: 'p10',
+    description: "Victory: the game's end-of-match orbit around the winner (clean).",
+  },
+];
