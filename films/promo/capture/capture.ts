@@ -1,5 +1,5 @@
-// Deterministic footage capture: replays a recorded round (record.ts) through the real game client on a virtual
-// clock, one exact 1/60 s step per frame, screenshots each frame over CDP and encodes 1920×1080 60 fps H.264.
+// Deterministic footage capture: replays a recorded round through the real client on a virtual clock, one
+// frame per 1000/(clip.fps ?? 60) ms, encoded at that source frame rate as 1920×1080 H.264.
 //
 //   bun films/promo/capture/build.ts                      # (re)build the capture client after game changes
 //   bun films/promo/capture/capture.ts <clip> [<clip>…]   # clips from shots.ts; --all; --list; --still <clip>@<s>
@@ -13,7 +13,8 @@ import { generateMap } from '../../../shared/map';
 import type { GameEvent, ServerMsg } from '../../../shared/protocol';
 import { Cdp, Page, launchChrome } from './cdp';
 import type { CamSpec } from './prelude';
-import { SHOTS, type Clip } from './shots';
+import type { Clip } from './cams';
+import { SHOTS } from './shots';
 
 const HERE = import.meta.dir;
 const ROOT = join(HERE, '../../..');
@@ -26,8 +27,13 @@ const H = 1080;
 const DSF = 2;
 const GL_W = Math.floor(W * Math.min(DSF, 1.75));
 const GL_H = Math.floor(H * Math.min(DSF, 1.75));
-const FPS = 60;
-const FRAME_MS = 1000 / FPS;
+const DEFAULT_FPS = 60;
+const FRAME_MS = 1000 / DEFAULT_FPS; // pre-roll / fast-forward only
+function fpsOf(clip: Clip): number {
+  const fps = clip.fps ?? DEFAULT_FPS;
+  if (!Number.isInteger(fps) || fps <= 0) throw new Error(`${clip.name}: fps must be a positive integer`);
+  return fps;
+}
 /** LR_CAP_SLOT=0..3 lets several capture processes run side by side (own HTTP + DevTools ports). */
 const SLOT = Number(process.env.LR_CAP_SLOT ?? 0);
 const HTTP_PORT = 3121 + SLOT;
@@ -273,7 +279,7 @@ async function prepare(page: Page, clip: Clip): Promise<{ feeder: Feeder; vt: nu
   const stream = streamFor(clip);
   const feeder = new Feeder(stream, clip.feedUntil !== undefined ? clip.feedUntil * 1000 : Infinity);
   const startMs = clip.start * 1000;
-  const endMs = startMs - FRAME_MS;
+  const endMs = startMs - 1000 / fpsOf(clip);
   const preroll = (clip.preroll ?? 2.5) * 1000;
   let vt = 0;
   // Fast-forward in 100 ms steps (still rendering, so effects/camera/HUD state evolve normally).
@@ -290,7 +296,7 @@ async function prepare(page: Page, clip: Clip): Promise<{ feeder: Feeder; vt: nu
   }
   const cam: CamSpec = clip.cam ?? { mode: 'game' };
   const setCamera = () =>
-    page.eval(`__cap.setCamera(${JSON.stringify(cam)}, ${startMs}, ${JSON.stringify({ noShake: clip.noShake })})`);
+    page.eval(`__cap.setCamera(${JSON.stringify(cam)}, ${startMs}, ${JSON.stringify({ noShake: clip.noShake, dof: clip.dof, subjectPoint: clip.subjectPoint })})`);
   if (clip.camPreroll !== false) await setCamera();
   for (let f = 0; f < prerollFrames; f++) {
     await step(page, feeder, vt, FRAME_MS);
@@ -307,6 +313,8 @@ async function screenshot(page: Page): Promise<Buffer> {
 
 async function captureClip(cdp: Cdp, clip: Clip): Promise<void> {
   const started = performance.now();
+  const fps = fpsOf(clip);
+  const frameMs = 1000 / fps;
   const page = await openClipPage(cdp, clip);
   const prepared = await prepare(page, clip);
   let vt = prepared.vt;
@@ -315,8 +323,8 @@ async function captureClip(cdp: Cdp, clip: Clip): Promise<void> {
   // drawing buffer directly → lossless raw RGBA (bottom-up, hence vflip).
   const raw = !clip.ui && !clip.screenshot;
   const input = raw
-    ? ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${GL_W}x${GL_H}`, '-framerate', String(FPS), '-i', '-']
-    : ['-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-'];
+    ? ['-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${GL_W}x${GL_H}`, '-framerate', String(fps), '-i', '-']
+    : ['-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-'];
   const ffmpeg = Bun.spawn(
     [
       'ffmpeg', '-y', '-loglevel', 'error', ...input,
@@ -324,7 +332,7 @@ async function captureClip(cdp: Cdp, clip: Clip): Promise<void> {
       '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-profile:v', 'high',
       '-g', '30', '-keyint_min', '30', '-sc_threshold', '0',
       '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
-      '-r', String(FPS), '-movflags', '+faststart', out,
+      '-r', String(fps), '-movflags', '+faststart', out,
     ],
     { stdin: 'pipe', stdout: 'inherit', stderr: 'inherit' },
   );
@@ -334,12 +342,12 @@ async function captureClip(cdp: Cdp, clip: Clip): Promise<void> {
     ffmpeg.stdin.write(bytes);
     await ffmpeg.stdin.flush();
   };
-  const frames = Math.round(clip.dur * FPS);
+  const frames = Math.round(clip.dur * fps);
   const prepMs = performance.now() - started;
-  // Frame f shows the world at clip time f/60 (vt = start + f/60 s).
+  // Frame f shows the world at clip time f/fps (vt = start + f/fps s).
   for (let f = 0; f < frames; f++) {
-    await step(page, prepared.feeder, vt, FRAME_MS, raw);
-    vt += FRAME_MS;
+    await step(page, prepared.feeder, vt, frameMs, raw);
+    vt += frameMs;
     if (!raw) ffmpeg.stdin.write(await screenshot(page));
     if (f % 30 === 0) await ffmpeg.stdin.flush();
   }
@@ -367,12 +375,14 @@ async function stills(cdp: Cdp, clip: Clip, times: number[], dir: string): Promi
   const prepared = await prepare(page, clip);
   let vt = prepared.vt;
   let frame = -1;
+  const fps = fpsOf(clip);
+  const frameMs = 1000 / fps;
   for (const at of [...times].sort((a, b) => a - b)) {
-    const target = Math.round(at * FPS);
+    const target = Math.round(at * fps);
     while (frame < target) {
-      await step(page, prepared.feeder, vt, FRAME_MS);
-      vt += FRAME_MS;
+      await step(page, prepared.feeder, vt, frameMs);
       frame++;
+      vt += frameMs;
     }
     const file = join(dir, `${clip.name}@${at}.jpg`);
     writeFileSync(file, await screenshot(page));
@@ -387,6 +397,7 @@ interface ManifestEntry {
   name: string;
   file: string;
   duration: number;
+  fps: number;
   hasUi: boolean;
   description: string;
   moments: Moment[];
@@ -420,7 +431,8 @@ function writeManifestEntry(clip: Clip): void {
   const entry: ManifestEntry = {
     name: clip.name,
     file: `${clip.name}.mp4`,
-    duration: Math.round(clip.dur * FPS) / FPS,
+    duration: Math.round(clip.dur * fpsOf(clip)) / fpsOf(clip),
+    fps: fpsOf(clip),
     hasUi: clip.ui,
     description: clip.description,
     moments,
@@ -495,9 +507,10 @@ try {
     const page = await openClipPage(cdp, clip);
     const prepared = await prepare(page, clip);
     let vt = prepared.vt;
-    for (let f = 0; f <= Math.round(Number(at) * FPS); f++) {
-      await step(page, prepared.feeder, vt, FRAME_MS);
-      vt += FRAME_MS;
+    const frameMs = 1000 / fpsOf(clip);
+    for (let f = 0; f <= Math.round(Number(at) * fpsOf(clip)); f++) {
+      await step(page, prepared.feeder, vt, frameMs);
+      vt += frameMs;
     }
     console.log(await page.eval(readFileSync(argv[2]!, 'utf8')));
   } else if (argv[0] === '--still') {

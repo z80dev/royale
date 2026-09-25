@@ -9,7 +9,16 @@ const root = join(here, '../../..');
 const outdir = join(here, 'dist');
 
 const HOOK = `
-;(globalThis as unknown as { __LR: unknown }).__LR = { state, renderer, ui, net, input, audio, get map() { return currentMap; } };
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import type { Scene } from 'three';
+import type { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+;(globalThis as unknown as { __LR: unknown }).__LR = {
+  state, renderer, ui, net, input, audio, BokehPass,
+  get map() { return currentMap; },
+  get cinema() {
+    return renderer as unknown as { scene: Scene; post: { composer: EffectComposer } };
+  },
+};
 `;
 
 const main = await Bun.build({

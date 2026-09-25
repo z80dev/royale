@@ -1,15 +1,15 @@
 // Synthwave/trap hybrid at 120 BPM in A minor (Am – F – C – G), built on the cue sheet:
-//   0–4   cold open: drone, heartbeat sub, filtered arp creeping in, riser
-//   4–14  drop 1: four-on-the-floor synthwave (octave bass, 16th arp, pumping pad, gated clap)
-//   14–18 build: drums out, snare roll, riser + reverse swell into
-//   18–30 drop 2: half-time trap (808 glides, hat rolls, big clap on 3, supersaw stabs) + impacts per ability
-//   30–34 breakdown: Liquidation Zone alarm, taiko, sub drops, riser
-//   34–38 airdrop: printer glitches + coin bells, groove back in
-//   38–46 easter eggs: full hybrid groove, blips on every egg cut
-//   46–50 rug pull: tape stop, sad detuned keys over the heartbeat, rebuild riser
-//   50–54 final drop: everything, choir + braam
-//   54–60 end card: groove thins to pad + arp, last impact, tail
-import { T, BEAT, BAR, SUBCUTS, END } from './timeline.js';
+//   0–4   cold open: drone + slow heartbeat, reverse swell, Laser Eyes kill at 2, gated black at 3.25
+//   4–14  drop 1: synthwave title + roster; LAUNCHPAD / ROYALE slams at 4 / 4.5
+//   14–18 build: drums out, snare roll, riser, touchdown at 17.75, pitch-drop into loot
+//   18–34 drop 2: eight-bar trap hybrid, pickup shimmer, Laser Eyes + three ability hits, two hook passes
+//   34–38 zone: alarm, taiko, sub drops, riser
+//   38–42 eggs: four-on-the-floor + 808s, blips on the lore cuts
+//   42–46 final: heartbeat, dark A strings, accelerating ticks, kill at 43, reverse swell
+//   46–50 duel: near silence until the sniper shot at 47 (largest transient), choir / strings swell
+//   50–54 winner: final trap drop, choir + braam, win melody
+//   54–60 end card: thinning groove, ten slab thuds from 55.6 on 16ths, resolving tail
+import { T, HIT, BEAT, BAR, SUBCUTS, END } from './timeline.js';
 
 const CHORDS = [[57, 60, 64], [53, 57, 60], [55, 60, 64], [55, 59, 62]]; // Am F C G
 const ROOTS = [33, 29, 36, 31]; // A1 F1 C2 G1
@@ -30,8 +30,19 @@ export function score(k) {
   limit.ratio.value = 20;
   limit.attack.value = 0.001;
   limit.release.value = 0.06;
+  // Gate after compression, including reverb: the black frame and the held breath must actually cut the tails.
+  const gate = ac.createGain();
+  gate.gain.setValueAtTime(1, 0);
+  gate.gain.setValueAtTime(1, HIT.black - 0.008);
+  gate.gain.linearRampToValueAtTime(0.0001, HIT.black);
+  gate.gain.setValueAtTime(0.0001, T.title - BEAT);
+  gate.gain.linearRampToValueAtTime(1, T.title - BEAT + 0.08);
+  gate.gain.setValueAtTime(1, T.duel - 0.008);
+  gate.gain.linearRampToValueAtTime(0.025, T.duel);
+  gate.gain.setValueAtTime(0.025, HIT.shot - 0.1);
+  gate.gain.linearRampToValueAtTime(1, HIT.shot);
   k.master.disconnect();
-  k.master.connect(glue).connect(limit).connect(ac.destination);
+  k.master.connect(glue).connect(limit).connect(gate).connect(ac.destination);
   // ---------- custom voices ----------
   const curve = (() => {
     const n = 1024, c = new Float32Array(n);
@@ -112,7 +123,7 @@ export function score(k) {
     n.connect(bp).connect(a);
     k.out(a, 1, 0.25);
   }); };
-  // Tape stop: everything bends down (a dying saw chord + sub) — the rug pull.
+  // Tape stop: a dying saw chord bending into the final confrontation, not a continuing drum groove.
   const tapeStop = (t, dur = 0.9) => k.at(t, () => {
     const a = ac.createGain();
     a.gain.setValueAtTime(0.09, t);
@@ -128,6 +139,48 @@ export function score(k) {
     }
     lp.connect(a);
     k.out(a, 1, 0.3, 0, 0.5);
+  });
+  // Laser Eyes: a 300 ms distorted saw / square dive, with a short metallic reverb tail.
+  const zap = (t, g = 0.22) => k.at(t, () => {
+    const sum = ac.createGain();
+    sum.gain.value = 0.7;
+    for (const [type, f] of [['sawtooth', 3400], ['square', 2300]]) {
+      const o = k.osc(type, f, t, 0.3);
+      o.frequency.exponentialRampToValueAtTime(75, t + 0.28);
+      o.connect(sum);
+    }
+    const ws = ac.createWaveShaper();
+    ws.curve = curve;
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(6500, t);
+    lp.frequency.exponentialRampToValueAtTime(300, t + 0.3);
+    const a = ac.createGain();
+    k.env(a.gain, t, 0.002, g, 0.29, 0, 0.008);
+    sum.connect(ws).connect(lp).connect(a);
+    k.out(a, 1, 0.32);
+  });
+  // Dry broadband muzzle crack: faster and brighter than the musical impacts.
+  const shotCrack = (t) => k.at(t, () => {
+    const hp = ac.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 1100;
+    const a = ac.createGain();
+    k.env(a.gain, t, 0.0005, 2.4, 0.075, 0, 0.02);
+    k.noise(t, 0.1).connect(hp).connect(a);
+    k.out(a, 1, 0.15);
+  });
+  // Stretch both halves of the kit-style heartbeat for the two slow-motion bookends.
+  const slowHeartbeat = (t, g) => k.at(t, () => {
+    for (const [dt, level] of [[0, 1], [0.39, 0.7]]) {
+      const at = t + dt;
+      const o = k.osc('sine', 52, at, 0.45);
+      o.frequency.exponentialRampToValueAtTime(34, at + 0.225);
+      const a = ac.createGain();
+      k.env(a.gain, at, 0.012, g * level, 0.375, 0, 0.05);
+      o.connect(a);
+      k.out(a, 1, 0.1);
+    }
   });
 
   const arp = (t0, t1, g = 0.05, cut0 = 1800, cut1 = 1800, oct = 12) => {
@@ -172,21 +225,23 @@ export function score(k) {
   };
 
   // ---------- 0–4 cold open ----------
-  k.drone(0, T.title + 0.5, [33, 45, 52, 57], 0.075, 520);
-  for (let t = 0.0; t < T.title; t += BEAT * 2) k.heartbeat(t, 0.5);
-  k.glitch(0.3, 0.12, 0.02); // "gm." types
-  k.blip(0.32, 1760, 0.02, 0.05);
-  k.blip(0.42, 1320, 0.02, 0.05);
-  k.blip(0.52, 2640, 0.018, 0.05);
-  arp(1, T.title, 0.05, 600, 2600);
-  k.riser(1.5, T.title, 0.2);
-  k.swell(2.5, T.title, 0.15);
+  k.drone(T.open, HIT.black, [33, 45, 52, 57], 0.11, 520);
+  for (let t = T.open; t < HIT.hookKill; t += BEAT * 2) slowHeartbeat(t, 0.6);
+  k.swell(HIT.hookKill - 1.25, HIT.hookKill, 0.3);
+  k.impact(HIT.hookKill, 1.15, 38);
+  k.sub(HIT.hookKill, 0.8, 100, 28, HIT.black - HIT.hookKill);
+  zap(HIT.hookKill, 0.3);
+  k.bell(HIT.hookKill, k.hz(81), 0.08, HIT.black - HIT.hookKill, 2, 1);
+  k.riser(T.title - BEAT, T.title, 0.22);
+  k.whoosh(T.title - BEAT, BEAT, 0.18);
 
   // ---------- 4–14 drop 1: synthwave ----------
   k.impact(T.title, 0.9, 45);
   k.braam(T.title, [33, 45, 52], 2.4, 0.3, 1.1);
   k.crash(T.title, 0.3);
   k.sub(T.title, 0.6, 80, 30, 2.5);
+  k.impact(HIT.logo + BEAT, 0.95, 48);
+  stab(HIT.logo + BEAT, [57, 60, 64, 69], 0.08, 0.4);
   fourFloor(T.title + BAR / 2, T.drop, { kick: 0.95, clap: 0.4, hat: 0.07, bass: 0.26 });
   pumpPad(T.title, T.drop, 0.045, 2400);
   arp(T.title, T.drop, 0.05, 2400, 4200);
@@ -199,88 +254,95 @@ export function score(k) {
   for (let i = 0; i < 10; i++) k.blip(T.roster + 0.25 + i * 0.25, k.hz([81, 84, 88, 91, 93][i % 5]), 0.03, 0.06, 'triangle');
 
   // ---------- 14–18 build ----------
-  k.kick(T.drop, 1);
   k.impact(T.drop, 0.45, 50);
-  pumpPad(T.drop, T.clanker - BEAT, 0.07, 1600, 0.3);
-  arp(T.drop, T.clanker - BEAT, 0.075, 1200, 6500);
-  for (let t = T.drop + BAR, i = 0; t < T.clanker - 1e-6; i++) {
-    const step = t < T.drop + BAR * 1.5 ? BEAT / 2 : t < T.clanker - BEAT ? BEAT / 4 : BEAT / 8;
-    snare(t, 0.2 + 0.3 * ((t - T.drop) / 4));
+  pumpPad(T.drop, T.loot - BEAT, 0.07, 1600, 0.3);
+  arp(T.drop, T.loot - BEAT, 0.075, 1200, 6500);
+  for (let t = T.drop + BAR; t < T.loot - 1e-6;) {
+    const step = t < T.drop + BAR * 1.5 ? BEAT / 2 : t < T.loot - BEAT ? BEAT / 4 : BEAT / 8;
+    snare(t, 0.2 + 0.3 * ((t - T.drop) / (T.loot - T.drop)));
     t += step;
   }
-  for (let t = T.drop; t < T.drop + BAR; t += BEAT) k.kick(t, 0.8);
-  k.riser(T.drop, T.clanker, 0.3);
-  k.swell(T.drop + 2, T.clanker, 0.3);
-  k.whoosh(T.clanker - 0.8, 0.8, 0.22);
-  k.sub(T.clanker - BEAT, 0.35, 180, 40, BEAT); // pitch-drop into the drop
+  k.riser(T.drop, T.loot, 0.3);
+  k.swell(T.drop + BAR, T.loot, 0.3);
+  k.whoosh(T.loot - 0.8, 0.8, 0.22);
+  k.sub(T.loot - BEAT, 0.35, 180, 40, BEAT);
+  k.taiko(HIT.landing, 0.28, 48);
 
-  // ---------- 18–30 drop 2: trap hybrid, abilities ----------
-  for (const t of [T.clanker, T.orb, T.sendit]) {
+  // ---------- 18–34 drop 2: trap hybrid, loot + abilities ----------
+  for (const t of [T.loot, T.mintdrop, T.clanker, T.orb]) {
     k.impact(t, 0.8, 42);
     k.crash(t, 0.26);
     stab(t, CHORDS[chordAt(t)].map((m) => m + 12), 0.07, 0.5);
   }
-  k.braam(T.clanker, [33, 45, 52], 1.8, 0.25, 1.2);
-  trap(T.clanker, T.zone);
-  fourFloor(T.clanker, T.zone, { kick: 0, clap: 0, hat: 0, bass: 0.17 });
-  pumpPad(T.clanker, T.zone, 0.07, 4600, 0.8);
-  for (let b = T.clanker; b < T.zone - 1e-6; b += BAR) {
+  k.braam(T.loot, [33, 45, 52], 1.8, 0.25, 1.2);
+  trap(T.loot, T.zone);
+  fourFloor(T.loot, T.zone, { kick: 0, clap: 0, hat: 0, bass: 0.17 });
+  pumpPad(T.loot, T.zone, 0.07, 4600, 0.8);
+  for (let b = T.loot; b < T.zone - 1e-6; b += BAR) {
     stab(b + BEAT * 1.5, CHORDS[chordAt(b)].map((m) => m + 12), 0.06, 0.25);
     stab(b + BEAT * 2.5, CHORDS[chordAt(b)].map((m) => m + 12), 0.05, 0.2);
     stab(b + BEAT * 3.5, CHORDS[chordAt(b)].map((m) => m + 12), 0.055, 0.2);
   }
-  arp(T.clanker, T.zone, 0.045, 3400, 3400, 24);
-  // drop lead: the title hook an octave up, saw + square
-  for (const base of [T.clanker, T.sendit - BAR]) for (const [dt, m] of hook) { k.pluck(base + dt, m + 12, 0.06, 6500, 0.35, 'sawtooth'); k.pluck(base + dt, m, 0.045, 4000, 0.35, 'square'); }
+  arp(T.loot, T.zone, 0.045, 3400, 3400, 24);
+  // Two four-bar passes; the last note releases before the zone breakdown.
+  for (const base of [T.loot, T.loot + BAR * 4]) for (const [dt, m] of hook) { k.pluck(base + dt, m + 12, 0.06, 6500, 0.35, 'sawtooth'); k.pluck(base + dt, m, 0.045, 4000, 0.35, 'square'); }
+  for (let i = 0; i < 12; i++) k.bell(HIT.grab + i * BEAT / 4, k.hz([81, 84, 88, 91][i % 4] + Math.floor(i / 4) * 12), 0.04, 0.5, 3.5, 2);
+  zap(HIT.firstKill, 0.26);
+  k.impact(HIT.firstKill, 0.9, 42);
+  k.impact(HIT.mintLand, 1.05, 32);
+  k.sub(HIT.mintLand, 0.85, 78, 26, 1.8);
+  k.taiko(HIT.mintLand, 0.6, 46);
 
-  // ---------- 30–34 breakdown: Liquidation Zone ----------
+  // ---------- 34–38 breakdown: Liquidation Zone ----------
   k.impact(T.zone, 0.7, 38);
   k.sweepDown(T.zone, 1.2, 400, 40, 0.25, 'sawtooth');
-  k.drone(T.zone, T.airdrop, [33, 40, 45], 0.09, 700);
-  for (let t = T.zone; t < T.airdrop - 1e-6; t += BEAT) {
+  k.drone(T.zone, T.eggs, [33, 40, 45], 0.09, 700);
+  for (let t = T.zone; t < T.eggs - 1e-6; t += BEAT) {
     // alarm: two-tone siren blips + taiko pulse
     k.blip(t, 988, 0.05, 0.2, 'sawtooth');
     k.blip(t + BEAT / 2, 740, 0.04, 0.2, 'sawtooth');
     if (Math.round((t - T.zone) / BEAT) % 2 === 0) k.taiko(t, 0.55, 58);
   }
   k.strings(T.zone, [45, 52, 57, 60], 3.6, 0.05, 0.8, 0.6);
-  for (let t = T.zone; t < T.airdrop; t += BAR) b808(t, 33, BAR * 0.9, 0.5);
-  k.riser(T.zone + 2, T.airdrop, 0.3);
-  k.whoosh(T.airdrop - 0.6, 0.6, 0.2);
+  for (let t = T.zone; t < T.eggs; t += BAR) b808(t, 33, BAR * 0.9, 0.5);
+  k.riser(T.zone + BAR, T.eggs, 0.3);
+  k.whoosh(T.eggs - 0.6, 0.6, 0.2);
 
-  // ---------- 34–38 airdrop: money printer ----------
-  k.impact(T.airdrop + 1.5, 0.7, 50); // crate lands
-  k.crash(T.airdrop + 1.5, 0.25);
-  k.whoosh(T.airdrop + 0.6, 0.9, 0.16, 2500, 300);
-  fourFloor(T.airdrop, T.eggsA, { kick: 0.9, clap: 0.4, hat: 0.07, bass: 0.24 });
-  pumpPad(T.airdrop, T.eggsA, 0.04, 2600);
-  // brrrr: glitch printer bursts, then coins raining (bells)
-  k.impact(T.airdrop + 2, 0.55, 70);
-  k.glitch(T.airdrop + 2, 0.5, 0.06);
-  k.glitch(T.airdrop + 2.75, 0.4, 0.05);
-  for (let i = 0; i < 14; i++) k.bell(T.airdrop + 2.05 + i * 0.125, k.hz([88, 91, 93, 96][i % 4]), 0.035, 0.5, 3.5, 2);
+  // ---------- 38–42 easter eggs ----------
+  k.impact(T.eggs, 0.6, 48);
+  k.crash(T.eggs, 0.22);
+  fourFloor(T.eggs, T.final, { kick: 0.9, clap: 0.45, hat: 0.075, bass: 0.18 });
+  for (let b = T.eggs, n = 0; b < T.final - 1e-6; b += BAR, n++) b808(b, ROOTS[chordAt(b)], BAR * 0.95, 0.6, n % 2 ? ROOTS[chordAt(b)] + 7 : null);
+  pumpPad(T.eggs, T.final, 0.06, 3800);
+  arp(T.eggs, T.final, 0.05, 3600, 3600);
+  for (const t of SUBCUTS.filter((x) => x > T.eggs && x < T.final)) { k.whoosh(t - 0.25, 0.3, 0.12, 600, 5000); k.blip(t, 1568, 0.03, 0.08, 'triangle'); }
 
-  // ---------- 38–46 easter eggs ----------
-  k.impact(T.eggsA, 0.6, 48);
-  k.crash(T.eggsA, 0.22);
-  fourFloor(T.eggsA, T.rugged, { kick: 0.9, clap: 0.45, hat: 0.075, bass: 0.18 });
-  for (let b = T.eggsA, n = 0; b < T.rugged - 1e-6; b += BAR, n++) b808(b, ROOTS[chordAt(b)], BAR * 0.95, 0.6, n % 2 ? ROOTS[chordAt(b)] + 7 : null);
-  pumpPad(T.eggsA, T.rugged, 0.06, 3800);
-  arp(T.eggsA, T.rugged, 0.05, 3600, 3600);
-  for (const t of SUBCUTS.filter((x) => x > T.eggsA && x < T.rugged)) { k.whoosh(t - 0.25, 0.3, 0.12, 600, 5000); k.blip(t, 1568, 0.03, 0.08, 'triangle'); }
+  // ---------- 42–46 final: two left, no drum groove ----------
+  tapeStop(T.final, 0.65);
+  k.drone(T.final, T.duel, [33, 45, 52], 0.1, 580);
+  k.strings(T.final, [45, 52, 57, 60], 3.5, 0.065, 0.5, 0.5, 1300);
+  for (let t = T.final; t < T.duel; t += BEAT) k.heartbeat(t, 0.6);
+  for (let t = T.final; t < T.duel - 1e-6;) {
+    const progress = (t - T.final) / (T.duel - T.final);
+    k.hat(t, 0.035 + progress * 0.045, 0.025);
+    t += t < T.final + BAR ? BEAT / 2 : t < T.duel - BEAT ? BEAT / 4 : BEAT / 8;
+  }
+  zap(HIT.final2, 0.28);
+  k.impact(HIT.final2, 1, 38);
+  k.riser(T.duel - BAR, T.duel, 0.32);
+  k.swell(T.duel - 1.25, T.duel, 0.3);
 
-  // ---------- 46–50 rug pull ----------
-  tapeStop(T.rugged, 0.9);
-  k.sweepDown(T.rugged, 0.9, 220, 30, 0.35, 'sawtooth');
-  k.impact(T.rugged, 0.6, 40);
-  k.glitch(T.rugged + 0.02, 0.3, 0.06);
-  for (let t = T.rugged + 1; t < T.winner; t += BEAT * 2) k.heartbeat(t, 0.65);
-  // NGMI: detuned minor keys
-  for (const [dt, m] of [[1.5, 69], [1.5, 72], [1.5, 76], [2.5, 68], [2.5, 71], [2.5, 74]]) k.piano(T.rugged + dt, m, 0.2, 2.5);
-  k.drone(T.rugged + 0.8, T.winner, [33, 44], 0.09, 480);
-  k.riser(T.rugged + 2, T.winner, 0.3);
-  k.swell(T.rugged + 2.5, T.winner, 0.28);
-  snare(T.winner - BEAT, 0.4); snare(T.winner - BEAT * 0.75, 0.45); snare(T.winner - BEAT / 2, 0.5); snare(T.winner - BEAT / 4, 0.55);
+  // ---------- 46–50 duel: hold breath, sniper shot, release ----------
+  k.drone(T.duel, HIT.shot, [33], 0.065, 180);
+  slowHeartbeat(T.duel + 0.12, 0.45);
+  k.swell(HIT.shot - 0.8, HIT.shot, 0.24);
+  k.impact(HIT.shot, 1.8, 35);
+  k.crash(HIT.shot, 0.6);
+  k.sub(HIT.shot, 1.2, 110, 26, 2.4);
+  shotCrack(HIT.shot);
+  k.choir(HIT.shot + 0.2, [57, 64, 69, 72], T.winner - HIT.shot - 0.2, 0.1, 'a', 2.8, 0.3);
+  k.strings(HIT.shot + 0.2, [45, 52, 57, 64], T.winner - HIT.shot - 0.2, 0.07, 2.8, 0.3);
+  k.swell(T.winner - 1.25, T.winner, 0.24);
 
   // ---------- 50–54 final drop ----------
   k.impact(T.winner, 1, 40);
@@ -299,7 +361,15 @@ export function score(k) {
   // ---------- 54–60 end card ----------
   k.impact(T.end, 0.7, 45);
   k.crash(T.end, 0.25);
-  fourFloor(T.end, T.end + BAR, { kick: 0.85, clap: 0.35, hat: 0.06, bass: 0.22 });
+  fourFloor(T.end, T.end + BEAT * 3, { kick: 0.85, clap: 0.35, hat: 0.06, bass: 0.22 });
+  // the ten slabs slam down on 16ths (end-slabs.mp4): a thud each, the roster blips on top, the last one lands hard
+  for (let i = 0; i < 10; i++) {
+    const t = T.end + 1.6 + i * BEAT / 4;
+    k.taiko(t, 0.35 + i * 0.03, 52 + i);
+    k.blip(t, k.hz([81, 84, 88, 91, 93][i % 5] + (i >= 5 ? 12 : 0)), 0.025, 0.06, 'triangle');
+  }
+  k.impact(T.end + 1.6 + BEAT * 9 / 4, 0.55, 50);
+  k.crash(T.end + 1.6 + BEAT * 9 / 4, 0.2);
   pumpPad(T.end, END - 0.5, 0.05, 2200, 0.5);
   arp(T.end, END - 1, 0.04, 3200, 800);
   k.strings(T.end + BAR, [45, 52, 57, 64], 3, 0.05, 1, 1.5);

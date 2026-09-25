@@ -3,97 +3,10 @@
 // Satoshi (0,0) · pizza (29,0) · lambo (14.5,25.1) · FTX (−14.5,25.1) · doge (−29,0) · hashrate (−14.5,−25.1)
 // · HODL (14.5,−25.1) · rocket (80,80) · Mt. Gox (−80,80) · tulips (−80,−80) · Luna (80,−80). Moon toward (−x,−z).
 
-import type { CamSpec } from './prelude';
-
-export interface Clip {
-  name: string;
-  /** Recording name in capture/recordings (without .ndjson). */
-  rec: string;
-  /** Recording time (s) of the first captured frame. */
-  start: number;
-  dur: number;
-  ui: boolean;
-  description: string;
-  /** Player id the client plays as (HUD, death screen, results); null = seatless spectator; default p1 (host). */
-  you?: string | null;
-  /** Spectate/follow schedule while "you" is dead or null: [recording s, player id]. */
-  focus?: [number, string][];
-  cam?: CamSpec;
-  noShake?: boolean;
-  /** Capture via composited page screenshots even without UI (the raw WebGL readback path stalls on `city`). */
-  screenshot?: boolean;
-  /** Stop feeding recorded messages after this recording time (s) — holds the lobby for long flyovers. */
-  feedUntil?: number;
-  preroll?: number;
-  /** false = switch to the clip camera on the first captured frame instead of during the pre-roll. */
-  camPreroll?: boolean;
-  css?: string;
-  /** Lobby brand-select montage: from recording s, the host switches brand every `every` s through `brands`. */
-  brandCycle?: { from: number; every: number; brands: string[] };
-  moments?: { t: number; what: string }[];
-  autoMoments?: boolean;
-  /** Auto-moment filter: only events within this many metres of the subject (default 40). */
-  momentRadius?: number;
-  /** Auto-moment subject point (x, z) instead of the focus player. */
-  subjectPoint?: [number, number];
-}
-
-type Vec = [number, number, number];
-
-/** Close cinematic follow on the focus player. */
-const close = (yaw = 90, extra: Partial<Extract<CamSpec, { mode: 'follow' }>> = {}): CamSpec => ({
-  mode: 'follow',
-  dist: 19,
-  pitch: 36,
-  yaw,
-  yawSpeed: 5,
-  fov: 42,
-  rate: 4,
-  lookY: 1.2,
-  ...extra,
-});
-/** Game-like steep follow, ~40% tighter than the in-game framing. */
-const tight = (yaw = 90, extra: Partial<Extract<CamSpec, { mode: 'follow' }>> = {}): CamSpec => ({
-  mode: 'follow',
-  dist: 24,
-  pitch: 56,
-  yaw,
-  yawSpeed: 3,
-  fov: 40,
-  rate: 4,
-  lookY: 1,
-  ...extra,
-});
-/** Medium follow, a bit higher, for fights that spread out. */
-const medium = (yaw = 90, extra: Partial<Extract<CamSpec, { mode: 'follow' }>> = {}): CamSpec => ({
-  mode: 'follow',
-  dist: 30,
-  pitch: 46,
-  yaw,
-  yawSpeed: 4,
-  fov: 42,
-  rate: 3.5,
-  lookY: 1,
-  ...extra,
-});
-const orbit = (center: Vec, radius: number, height: number, yaw: number, yawSpeed: number, extra: Partial<Extract<CamSpec, { mode: 'orbit' }>> = {}): CamSpec => ({
-  mode: 'orbit',
-  center,
-  radius,
-  height,
-  yaw,
-  yawSpeed,
-  fov: 40,
-  ...extra,
-});
-const path = (keys: [number, Vec, Vec, number?][], extra: Partial<Extract<CamSpec, { mode: 'path' }>> = {}): CamSpec => ({
-  mode: 'path',
-  keys: keys.map(([t, pos, look, fov]) => (fov === undefined ? { t, pos, look } : { t, pos, look, fov })),
-  ...extra,
-});
-
-/** Lobby backdrop (empty neon city, no players): recorded lobby held still. */
-const LOBBY = { rec: 'r1', start: 4, feedUntil: 8, ui: false, noShake: true } as const;
+import { close, LOBBY, orbit, path, tight, type Clip } from './cams';
+import { CINEMA_A } from './cinema-a';
+import { CINEMA_B } from './cinema-b';
+import { CINEMA_C } from './cinema-c';
 
 export const SHOTS: Clip[] = [
   // ───────────── establishing / city ─────────────
@@ -309,13 +222,13 @@ export const SHOTS: Clip[] = [
     dur: 7.5,
     ui: true,
     description: 'Lobby UI: character select — the host flips through all 10 launchpad brands (hero panel + ability), players join in the list.',
-    brandCycle: { from: 1.5, every: 0.65, brands: ['doppler', 'uniswap', 'pons', 'long', 'jump', 'fomo', 'pump', 'clanker', 'zora', 'bankr'] },
+    brandCycle: { from: 1.5, every: 0.65, brands: ['doppler', 'uniswap', 'pons', 'long', 'jpeg', 'fomo', 'pump', 'clanker', 'zora', 'bankr'] },
     moments: [
       { t: 0.5, what: 'Doppler selected' },
       { t: 1.15, what: 'Uniswap' },
       { t: 1.8, what: 'Pons' },
       { t: 2.45, what: 'Long' },
-      { t: 3.1, what: 'Jump' },
+      { t: 3.1, what: 'JPEG' },
       { t: 3.75, what: 'Fomo' },
       { t: 4.4, what: 'Pump' },
       { t: 5.05, what: 'Clanker' },
@@ -365,7 +278,7 @@ export const SHOTS: Clip[] = [
     dur: 8,
     ui: false,
     you: 'p1',
-    description: 'Deploy camera riding down with doppler.lol (Doppler) toward Genesis Plaza, others falling around.',
+    description: 'Deploy camera riding down with sonic_boom (Doppler) toward Genesis Plaza, others falling around.',
     moments: [{ t: 0, what: 'falling over the city' }],
     autoMoments: false,
   },
@@ -430,7 +343,7 @@ export const SHOTS: Clip[] = [
     you: null,
     focus: [[0, 'p8']],
     cam: tight(110),
-    description: 'Close combat with a Jump player.',
+    description: 'Close combat with a JPEG player.',
   },
   {
     name: 'combat-d',
@@ -464,7 +377,7 @@ export const SHOTS: Clip[] = [
     focus: [[0, 'b10']],
     cam: orbit([33, 0, -56], 10, 11, 215, 7, { lookY: 0.8, fov: 44 }),
     subjectPoint: [33, -56],
-    description: 'Clanker deploys its auto turret beside Zora HQ; the turret shreds a Jump player.',
+    description: 'Clanker deploys its auto turret beside Zora HQ; the turret shreds a JPEG player.',
   },
   {
     name: 'orb',
@@ -479,16 +392,16 @@ export const SHOTS: Clip[] = [
     description: 'Zora orb shield dome blocking bullets.',
   },
   {
-    name: 'sendit',
-    rec: 'r3',
-    start: 36.2,
-    dur: 4,
+    name: 'mintdrop',
+    rec: 'r1',
+    start: 101.8,
+    dur: 4.5,
     ui: false,
     you: null,
-    focus: [[0, 'p8']],
-    cam: orbit([-35, 0, 20.5], 11, 9, 60, 7, { lookY: 1, fov: 44 }),
-    subjectPoint: [-35, 20.5],
-    description: 'Jump "Send It": leap over walls with a landing shockwave.',
+    focus: [[0, 'b14']],
+    cam: close(250, { dist: 15, pitch: 24, yawSpeed: 8, rate: 5, lookY: 2 }),
+    subjectPoint: [-61, 46],
+    description: 'JPEG "Mint Drop": 0xRugger leaps 13.5 m and the landing shockwave finishes DiamondDave.',
   },
   {
     name: 'pump',
@@ -674,4 +587,7 @@ export const SHOTS: Clip[] = [
     you: 'p10',
     description: "Victory: the game's end-of-match orbit around the winner (clean).",
   },
+  ...CINEMA_A,
+  ...CINEMA_B,
+  ...CINEMA_C,
 ];

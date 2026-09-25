@@ -1,10 +1,12 @@
-// LAUNCHPAD ROYALE — promo (60 s, 1080p60). Real in-game footage (footage/manifest.json, see footage.js) cut on a
-// 120 BPM bar grid (timeline.js), a synthwave/trap score (score.js), and crisp overlay type in the game's look:
-// Unbounded display type, JetBrains Mono labels, mint #19e3a7 and gold #ffb627 on a near-black night.
-import { W, H, F, clamp, lerp, seg, E, hash, txt, measure, rrect } from 'filmkit/lib.js';
-import { T, END, BEAT, EDL, SUBCUTS } from './timeline.js';
+// LAUNCHPAD ROYALE — launch trailer (60 s, 1080p60). One recorded 24-player match (r1) told through bankr_bot, shot
+// by a virtual cinematographer in the real game client (capture/: street-level telephoto cameras, depth of field,
+// 240 fps slow motion; footage/manifest.json, see footage.js), cut on a 120 BPM bar grid (timeline.js) to a
+// synthwave/trap score (score.js). Blender renders the 3D title (blender/title.py) and the badge-slab end card
+// (blender/endcard.py). Overlay type: Unbounded display, JetBrains Mono labels, mint #19e3a7 and gold #ffb627.
+import { W, H, F, clamp, lerp, seg, E, txt, measure, rrect } from 'filmkit/lib.js';
+import { T, END, BEAT, EDL, SUBCUTS, HIT } from './timeline.js';
 import { score } from './score.js';
-import { loadFootage, seekFootage, drawFootage } from './footage.js';
+import { loadFootage, seekFootage, drawFootage, drawLayers } from './footage.js';
 
 export const palette = {
   mint: '#19e3a7', mintDeep: '#0fae85', gold: '#ffb627', pink: '#ff3d9a', danger: '#ff3b5c',
@@ -15,7 +17,7 @@ const U = 'Unbounded';
 
 // Brands in the game's roster order, with their primary colours (shared/constants.ts).
 const BRANDS = [
-  ['doppler', '#0FAE85'], ['uniswap', '#FF007A'], ['pons', '#C9CED6'], ['long', '#DDF5E3'], ['jump', '#1576D2'],
+  ['doppler', '#0FAE85'], ['uniswap', '#FF007A'], ['pons', '#C9CED6'], ['long', '#DDF5E3'], ['jpeg', '#A8BFFF'],
   ['fomo', '#606AF7'], ['pump', '#5FD18B'], ['clanker', '#8A63D2'], ['zora', '#4281D3'], ['bankr', '#FF613D'],
 ];
 const BRAND_COLOR = Object.fromEntries(BRANDS);
@@ -114,7 +116,6 @@ function eggsDraw(o, cap, s, t) {
   o.restore();
 }
 const captionStyles = () => ({
-  gm: { font: U, size: 230, weight: 900, color: P.text, y: 520, anim: 'type', cps: 10, in: 0, out: 0.25, glow: P.mint, glowBlur: 40 },
   slam: { font: U, size: 150, weight: 900, color: '#ffffff', y: 540, in: 0.35, out: 0.3, lineHeight: 1.08, from: 1.7, draw: slamDraw, glow: true, glowBlur: 30, track: 2 },
   big: { font: U, size: 104, weight: 900, color: '#ffffff', y: 860, in: 0.25, out: 0.2, lineHeight: 1.1, from: 1.4, draw: slamDraw, glow: true, glowBlur: 22, track: 1 },
   kicker: { font: F.mono, size: 30, weight: 800, color: P.mint, y: 170, anim: 'fade', in: 0.3, out: 0.3, track: 10 },
@@ -126,35 +127,31 @@ const captionStyles = () => ({
 });
 
 const captions = [
-  { id: 'gm', style: 'gm', text: [[['gm', P.text], ['.', P.mint]]], t0: 0.2, t1: 3.9 },
-
-  { id: 'title', style: 'slam', text: ['LAUNCHPAD', [['ROYALE', P.mint]]], t0: T.title + 0.02, t1: T.roster - 0.15, y: 520, breathe: 0.012 },
-  { id: 'title-kicker', style: 'kicker', text: 'THE CRYPTO BATTLE ROYALE · IN YOUR BROWSER', t0: T.title + 0.6, t1: T.roster - 0.15, y: 790, color: P.gold },
+  { id: 'title-kicker', style: 'kicker', text: 'THE CRYPTO BATTLE ROYALE · IN YOUR BROWSER', t0: T.title + 0.9, t1: T.roster - 0.15, y: 790, color: P.gold },
 
   { id: 'roster', style: 'big', text: [[['10 LAUNCHPADS. ', '#ffffff'], ['1 BAG.', P.gold]]], t0: T.roster + 0.15, t1: T.drop - 0.15, size: 92, y: 948 },
 
-  { id: 'drop', style: 'slam', text: [[['DROP ', '#ffffff'], ['IN.', P.mint]]], t0: T.drop + 0.15, t1: T.clanker - 0.1, size: 170, y: 540 },
+  { id: 'drop', style: 'slam', text: [[['24 DEGENS ', '#ffffff'], ['DROP IN.', P.mint]]], t0: T.drop + 0.15, t1: T.loot - 0.1, size: 120, y: 540 },
 
+  { id: 'loot-kicker', style: 'kicker', text: 'LEGENDARY LOOT', t0: T.loot + 0.1, t1: T.mintdrop - 0.15, color: P.gold, y: 150 },
+  { id: 'loot', style: 'big', text: [[['LASER EYES: ', '#ffffff'], ['ON.', P.danger]]], t0: HIT.grab - 0.15, t1: T.mintdrop - 0.15, y: 890, size: 96 },
+
+  { id: 'ab-mintdrop', style: 'ability', text: 'MINT DROP', brand: 'jpeg', kicker: 'JPEG · LEAP + SHOCKWAVE', t0: T.mintdrop + 0.1, t1: T.clanker - 0.15 },
   { id: 'ab-clanker', style: 'ability', text: 'DEPLOY CLANKER', brand: 'clanker', kicker: 'CLANKER · AUTO TURRET', t0: T.clanker + 0.1, t1: T.orb - 0.15 },
-  { id: 'ab-orb', style: 'ability', text: 'ORB SHIELD', brand: 'zora', kicker: 'ZORA · BULLET-BLOCKING DOME', t0: T.orb + 0.1, t1: T.sendit - 0.15 },
-  { id: 'ab-sendit', style: 'ability', text: 'SEND IT', brand: 'jump', kicker: 'JUMP · LEAP + SHOCKWAVE', t0: T.sendit + 0.1, t1: T.zone - 0.15 },
+  { id: 'ab-orb', style: 'ability', text: 'ORB SHIELD', brand: 'zora', kicker: 'ZORA · BULLET-BLOCKING DOME', t0: T.orb + 0.1, t1: T.zone - 0.15 },
 
-  { id: 'zone', style: 'big', text: [[['THE ', '#ffffff'], ['LIQUIDATION ZONE', P.danger]], 'IS COMING.'], t0: T.zone + 0.2, t1: T.airdrop - 0.15, y: 800, size: 84 },
+  { id: 'zone', style: 'big', text: [[['THE ', '#ffffff'], ['LIQUIDATION ZONE', P.danger]], 'IS COMING.'], t0: T.zone + 0.2, t1: T.eggs - 0.15, y: 800, size: 84 },
 
-  { id: 'airdrop-kicker', style: 'kicker', text: 'LEGENDARY AIRDROP', t0: T.airdrop + 0.1, t1: T.eggsA - 0.15, color: P.gold, y: 150 },
-  { id: 'printer', style: 'big', text: [[['MONEY PRINTER: ', '#ffffff'], ['brrrr', P.gold]]], t0: T.airdrop + 0.4, t1: T.eggsA - 0.15, y: 880, size: 90 },
+  { id: 'eggs', style: 'eggs', text: ["SATOSHI'S WATCHING.", 'WEN LAMBO? NOW LAMBO.', '10,000 BTC. TWO PIZZAS.'], at: EDL.filter((e) => e.at >= T.eggs && e.at < T.final).map((e) => e.at), t0: T.eggs + 0.05, t1: T.final - 0.1 },
 
-  { id: 'eggs-a', style: 'eggs', text: ["SATOSHI'S WATCHING.", 'WEN LAMBO? NOW LAMBO.', '10,000 BTC. TWO PIZZAS.'], at: EDL.filter((e) => e.at >= T.eggsA && e.at < T.eggsB).map((e) => e.at), t0: T.eggsA + 0.05, t1: T.eggsB - 0.1 },
-  { id: 'eggs-b', style: 'eggs', text: ['WHALE ALERT.', 'LUNA? NEVER HEARD OF HER.', 'NEXT STOP: THE MOON.'], at: EDL.filter((e) => e.at >= T.eggsB && e.at < T.rugged).map((e) => e.at), t0: T.eggsB + 0.05, t1: T.rugged - 0.1 },
-
-  { id: 'rugged-line', style: 'line', text: 'it happens to the best of us. queue again.', t0: T.rugged + 0.3, t1: T.winner - 0.15, y: 960 },
+  { id: 'final', style: 'kicker', text: '2 DEGENS LEFT', t0: T.final + 0.1, t1: T.duel - 0.15, color: P.danger, y: 205 },
 
   { id: 'winner-line', style: 'line', text: [[['last degen standing ', P.text], ['takes the bag.', P.gold]]], t0: T.winner + 0.2, t1: T.end - 0.15, y: 960 },
 
   { id: 'end-name', style: 'kicker', text: 'LAUNCHPAD ROYALE', t0: T.end + 0.1, t1: END - 0.1, y: 250, color: P.mint, size: 34, track: 14 },
   { id: 'end-cta', style: 'slam', text: ['CREATE A LOBBY.', 'SEND THE LINK.'], t0: T.end + 0.2, t1: END - 0.1, size: 104, y: 440, from: 1.3 },
   { id: 'end-url', style: 'url', text: 'z80.wtf/royale', t0: T.end + 0.9, t1: END - 0.1 },
-  { id: 'end-footer', style: 'footer', text: 'a doppler.lol production  ·  not financial advice', t0: T.end + 1.4, t1: END - 0.1 },
+  { id: 'end-footer', style: 'footer', text: 'independent side project  ·  not affiliated with any launchpad shown  ·  nfa', t0: T.end + 1.4, t1: END - 0.1, y: 1002 },
 ];
 
 // ---------- shots ----------
@@ -167,7 +164,7 @@ function cutKick(t) {
 }
 const baseFx = (t, o = {}) => {
   const kick = cutKick(t);
-  return { bloom: 0.16, bloomThresh: 0.78, grain: 0.025, vignette: 1.15, aber: 0.0008 + 0.004 * kick, exposure: 0.08 * kick, sat: 1.08, contrast: 1.04, ...o };
+  return { bloom: 0.14, bloomThresh: 0.86, grain: 0.025, vignette: 1.15, aber: 0.0008 + 0.004 * kick, exposure: 0.08 * kick, sat: 1.08, contrast: 1.04, ...o };
 };
 
 function footageShot(name, t0, t1, extra = {}) {
@@ -175,6 +172,7 @@ function footageShot(name, t0, t1, extra = {}) {
     name, t0, t1,
     draw(ctx, lt, dur, t, overlay) {
       drawFootage(ctx, t);
+      drawLayers(ctx, t);
       extra.draw?.(ctx, lt, dur, t, overlay);
     },
     fx: extra.fx ?? ((lt, t) => baseFx(t)),
@@ -200,81 +198,38 @@ function zonePulse(ctx, lt, dur, t) {
   ctx.fillRect(0, 0, W, H);
 }
 
-// Money printer: gold coins and green bills raining from the top after the pickup.
-function coinRain(ctx, lt) {
-  const start = 1.5;
-  if (lt < start) return;
-  const k = lt - start;
-  for (let i = 0; i < 70; i++) {
-    const r1 = hash(i * 7 + 1), r2 = hash(i * 7 + 2), r3 = hash(i * 7 + 3);
-    const sp = 700 + r2 * 700;
-    const y = -80 + ((k * sp + r3 * 400) % (H + 160));
-    if (k * sp + r3 * 400 < 0) continue;
-    ctx.save();
-    ctx.translate(r1 * W, y);
-    ctx.rotate(lt * (2 + (i % 5)) + i);
-    ctx.globalAlpha = 0.9;
-    if (i % 3) {
-      ctx.fillStyle = P.gold;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, 18, 18 * Math.max(0.15, Math.abs(Math.cos(lt * 6 + i))), 0, 0, Math.PI * 2);
-      ctx.fill();
-    } else {
-      ctx.fillStyle = '#5fd18b';
-      ctx.fillRect(-30, -15, 60, 30);
-      ctx.strokeStyle = '#0b3d25';
-      ctx.lineWidth = 3;
-      ctx.strokeRect(-24, -10, 48, 20);
-    }
-    ctx.restore();
-  }
-}
-
-// End card: darken + mint scanline glow behind the CTA.
+// End card: settle the Blender render's sky under the CTA (the slab row below stays untouched) + mint scanline.
 function endCard(ctx, lt) {
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, 'rgba(4,6,10,0.35)');
-  g.addColorStop(0.5, 'rgba(4,6,10,0.55)');
-  g.addColorStop(1, 'rgba(4,6,10,0.85)');
+  g.addColorStop(0.55, 'rgba(4,6,10,0.3)');
+  g.addColorStop(0.68, 'rgba(4,6,10,0)');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, W, H);
   const p = E.outExpo(seg(lt, 0.8, 1.6));
   ctx.fillStyle = `rgba(25,227,167,${0.9 * p})`;
   ctx.fillRect(W / 2 - 420 * p, 560, 840 * p, 4);
 }
-// End card: the ten badges in a row, popping in one per 16th.
-function endBadges(ctx, lt, dur, t, o) {
-  const size = 64, gap = 86, x0 = W / 2 - (gap * (BRANDS.length - 1)) / 2;
-  BRANDS.forEach(([id, col], i) => {
-    const p = seg(lt, 1.6 + i * 0.125, 1.6 + i * 0.125 + 0.3);
-    if (p <= 0 || !badges[id]) return;
-    const k = lerp(0.3, 1, E.outBack(p));
-    o.save();
-    o.translate(x0 + i * gap, 790);
-    o.scale(k, k);
-    o.globalAlpha = clamp(p * 3) * (1 - E.inCubic(seg(t, END - 0.6, END)));
-    o.shadowColor = col;
-    o.shadowBlur = 16;
-    o.drawImage(badges[id], -size / 2, -size / 2, size, size);
-    o.restore();
-  });
-}
+
+// Letterboxed slow-motion bookends: the cold-open hook and the last shot share one look (anamorphic streak, bars).
+// The game's own bloom already flares on kills and blasts, so hits get anamorphic streak and aberration, not more light.
+const scope = (t, hitAt, o = {}) => baseFx(t, { letterbox: 1, bloom: 0.1, bloomThresh: 0.9, streak: 0.2, contrast: 1.08, aber: 0.0008 + 0.005 * (t >= hitAt ? Math.exp(-(t - hitAt) * 6) : 0), ...o });
 
 const shots = [
-  footageShot('cold-open', T.open, T.title, { fx: (lt, t) => baseFx(t, { bloom: 0.3, glitch: lt > 0.18 && lt < 0.32 ? 0.35 : 0, fade: 1 - E.outCubic(seg(lt, 0, 0.7)), exposure: -0.1 }) }),
-  footageShot('title', T.title, T.roster, { fx: (lt, t) => baseFx(t, { bloom: 0.35, streak: 0.25 * Math.exp(-lt * 2), exposure: 0.25 * Math.exp(-lt * 6) }) }),
+  footageShot('cold-open', T.open, T.title, { fx: (lt, t) => scope(t, HIT.hookKill, { fade: 1 - E.outCubic(seg(lt, 0, 0.4)) }) }),
+  footageShot('title', T.title, T.roster, { fx: (lt, t) => baseFx(t, { bloom: 0.3, streak: 0.25 * Math.exp(-lt * 2), exposure: 0.25 * Math.exp(-lt * 6) }) }),
   footageShot('roster', T.roster, T.drop, { draw: underType }),
-  footageShot('drop-in', T.drop, T.clanker, { fx: (lt, t) => baseFx(t, { aber: 0.001 + 0.004 * seg(lt, 2.5, 4), exposure: 0.2 * seg(lt, 3.4, 4) }) }),
+  footageShot('drop-in', T.drop, T.loot, { fx: (lt, t) => baseFx(t, { aber: 0.001 + 0.004 * seg(lt, 3, 4), exposure: 0.15 * seg(lt, 3.5, 4) }) }),
+  footageShot('loot', T.loot, T.mintdrop, { draw: underType, fx: (lt, t) => baseFx(t, { warm: 0.06 }) }),
+  footageShot('ability-mintdrop', T.mintdrop, T.clanker),
   footageShot('ability-clanker', T.clanker, T.orb),
-  footageShot('ability-orb', T.orb, T.sendit),
-  footageShot('ability-sendit', T.sendit, T.zone),
-  footageShot('zone', T.zone, T.airdrop, { draw: zonePulse, fx: (lt, t) => baseFx(t, { tint: [1.08, 0.94, 0.96], sat: 1.0 }) }),
-  footageShot('airdrop', T.airdrop, T.eggsA, { draw: coinRain, fx: (lt, t) => baseFx(t, { bloom: 0.32, warm: 0.15 }) }),
-  footageShot('eggs-a', T.eggsA, T.eggsB),
-  footageShot('eggs-b', T.eggsB, T.rugged),
-  footageShot('rugged', T.rugged, T.winner, { draw: underType, fx: (lt, t) => baseFx(t, { glitch: lt < 0.5 ? 0.5 * (1 - lt / 0.5) : 0, sat: lt < 1.5 ? 0.9 : 1.0, aber: 0.001 + 0.006 * Math.exp(-lt * 4) }) }),
+  footageShot('ability-orb', T.orb, T.zone),
+  footageShot('zone', T.zone, T.eggs, { draw: zonePulse, fx: (lt, t) => baseFx(t, { tint: [1.08, 0.94, 0.96], sat: 1.0 }) }),
+  footageShot('eggs', T.eggs, T.final),
+  footageShot('final', T.final, T.duel, { fx: (lt, t) => scope(t, HIT.final2, { streak: 0.15 }) }),
+  footageShot('duel', T.duel, T.winner, { fx: (lt, t) => scope(t, HIT.shot, { streak: 0.3 }) }),
   footageShot('winner', T.winner, T.end, { draw: underType, fx: (lt, t) => baseFx(t, { bloom: 0.38, streak: 0.3 * Math.exp(-lt * 2), exposure: 0.3 * Math.exp(-lt * 5), warm: 0.1 }) }),
-  footageShot('end-card', T.end, END, { draw: (ctx, lt, dur, t, o) => { endCard(ctx, lt); endBadges(ctx, lt, dur, t, o); }, fx: (lt, t) => baseFx(t, { fade: E.inCubic(seg(t, END - 0.6, END)) }) }),
+  footageShot('end-card', T.end, END, { draw: endCard, fx: (lt, t) => baseFx(t, { fade: E.inCubic(seg(t, END - 0.6, END)) }) }),
 ];
 
 export default {
@@ -287,9 +242,10 @@ export default {
   palette,
   fonts: [{ family: U, url: new URL('./fonts/unbounded.ttf', import.meta.url).href, weight: '200 900' }],
   flashes: [
-    [T.title, 0.55, 0.12], [T.roster, 0.2, 0.08], [T.clanker, 0.6, 0.12], [T.orb, 0.35, 0.08], [T.sendit, 0.35, 0.08],
-    [T.airdrop + 1.5, 0.45, 0.1], [T.airdrop + 2, 0.3, 0.08], [T.eggsA, 0.25, 0.08], [T.rugged, 0.45, 0.1], [T.winner + 0.25, 0.6, 0.12], [T.winner + 1.5, 0.5, 0.12], [T.end, 0.3, 0.1],
-    ...SUBCUTS.filter((t) => t >= T.clanker && t < T.zone).map((t) => [t, 0.15, 0.06]),
+    [HIT.logo, 0.55, 0.12], [HIT.logo + BEAT, 0.3, 0.08], [T.roster, 0.2, 0.08], [T.loot, 0.3, 0.08],
+    [T.clanker, 0.2, 0.06], [T.orb, 0.2, 0.06], [T.eggs, 0.2, 0.06], [T.winner, 0.4, 0.1],
+    [T.end + 2.725, 0.2, 0.1], // last slab slams
+    ...SUBCUTS.filter((t) => t >= T.mintdrop && t < T.zone).map((t) => [t, 0.15, 0.06]),
   ],
   score,
   audio: { seed: 2140, reverb: 2.6, reverbGain: 0.45 },

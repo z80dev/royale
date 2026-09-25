@@ -1,4 +1,4 @@
-// Checks captured clips: stream format (1920×1080, 60 fps CFR, H.264 yuv420p), frame count vs manifest, and
+// Checks captured clips: stream format (1920×1080, manifest fps CFR, H.264 yuv420p), frame count, and
 // per-frame pacing proxies — frozen frames (no change from the previous frame) and flash/black glitches (a frame
 // whose brightness departs sharply from both neighbours).
 // Usage: bun films/promo/capture/verify.ts [clip…]   (default: every clip in footage/manifest.json)
@@ -7,10 +7,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const FOOTAGE = join(import.meta.dir, '../footage');
-const manifest = JSON.parse(readFileSync(join(FOOTAGE, 'manifest.json'), 'utf8')) as { name: string; file: string; duration: number }[];
+const manifest = JSON.parse(readFileSync(join(FOOTAGE, 'manifest.json'), 'utf8')) as { name: string; file: string; duration: number; fps?: number }[];
 const wanted = process.argv.slice(2);
 let bad = 0;
 for (const entry of manifest.filter((e) => !wanted.length || wanted.includes(e.name))) {
+  // Transparent VP9 WebM overlays are film assets, not H.264 game captures.
+  if (!entry.file.endsWith('.mp4')) continue;
+  const fps = entry.fps ?? 60;
   const file = join(FOOTAGE, entry.file);
   const probe = Bun.spawnSync([
     'ffprobe', '-v', 'error', '-select_streams', 'v:0', '-count_frames',
@@ -21,8 +24,8 @@ for (const entry of manifest.filter((e) => !wanted.length || wanted.includes(e.n
   const frames = Number(s.nb_read_frames);
   const problems: string[] = [];
   if (s.codec_name !== 'h264' || s.width !== 1920 || s.height !== 1080 || s.pix_fmt !== 'yuv420p') problems.push(`format ${s.codec_name} ${s.width}x${s.height} ${s.pix_fmt}`);
-  if (s.r_frame_rate !== '60/1' || s.avg_frame_rate !== '60/1') problems.push(`fps ${s.r_frame_rate} avg ${s.avg_frame_rate}`);
-  if (frames !== Math.round(entry.duration * 60)) problems.push(`frames ${frames} ≠ ${Math.round(entry.duration * 60)}`);
+  if (s.r_frame_rate !== `${fps}/1` || s.avg_frame_rate !== `${fps}/1`) problems.push(`fps ${s.r_frame_rate} avg ${s.avg_frame_rate}`);
+  if (frames !== Math.round(entry.duration * fps)) problems.push(`frames ${frames} ≠ ${Math.round(entry.duration * fps)}`);
   const stats = Bun.spawnSync([
     'ffmpeg', '-v', 'error', '-i', file, '-vf', 'signalstats,metadata=print:file=-', '-f', 'null', '-',
   ]).stdout.toString();

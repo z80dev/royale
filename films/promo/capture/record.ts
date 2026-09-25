@@ -52,14 +52,14 @@ const flush = (): void => {
 };
 
 const HUMANS: { name: string; character: CharacterId }[] = [
-  { name: 'doppler.lol', character: 'doppler' },
+  { name: 'sonic_boom', character: 'doppler' },
   { name: 'gm_anon', character: 'uniswap' },
   { name: 'ser_liquid', character: 'zora' },
   { name: 'moonboi', character: 'pump' },
   { name: 'based_ben', character: 'clanker' },
   { name: 'fomo_fiona', character: 'fomo' },
   { name: 'long_larry', character: 'long' },
-  { name: 'jumpman', character: 'jump' },
+  { name: 'jpeg_jenny', character: 'jpeg' },
   { name: 'ponsfam', character: 'pons' },
   { name: 'bankr_bot', character: 'bankr' },
 ];

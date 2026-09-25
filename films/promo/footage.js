@@ -1,9 +1,9 @@
-// Real game footage for the promo: footage/manifest.json lists clips (1920×1080, 60 fps H.264, short GOPs).
+// Real game footage for the promo: footage/manifest.json lists clips with per-entry fps (default 60).
 // film.seek(t) brings the one <video> the edit needs at t to the exact source frame; draw() then paints it
 // synchronously. Clips missing from the manifest draw a labelled placeholder, so the cut plays before the
 // footage exists and picks real clips up as they land.
 import { W, H, F, clamp, lerp, E, hash, txt } from 'filmkit/lib.js';
-import { EDL, BEAT } from './timeline.js';
+import { EDL, LAYERS, BEAT } from './timeline.js';
 
 // Logical clip name (used in the EDL) → footage manifest name(s); the first one present in the manifest wins, so a
 // fallback take stands in until the preferred capture lands. Unlisted names map to themselves.
@@ -12,7 +12,7 @@ export const CLIPS = {
 };
 
 const BASE = new URL('./footage/', import.meta.url);
-const FPS = 60;
+const FPS = 60; // film output fps (source clips may override this with entry.fps)
 let manifest = new Map();
 const videos = new Map(); // manifest name → Promise<HTMLVideoElement>
 const ready = new Map(); //  manifest name → HTMLVideoElement (after load)
@@ -56,8 +56,8 @@ function video(entry, slot = 0) {
         v.addEventListener('loadeddata', resolve, { once: true });
         v.addEventListener('error', () => reject(new Error(`footage ${entry.file}: ${v.error?.message ?? 'decode error'}`)), { once: true });
       });
-      v.frame = -1;
-      v.frames = Math.max(1, Math.floor((entry.duration ?? v.duration) * FPS) - 1);
+      v.fps = entry.fps ?? FPS;
+      v.frames = Math.max(1, Math.floor((entry.duration ?? v.duration) * v.fps) - 1);
       ready.set(key, v);
       return v;
     })();
@@ -92,14 +92,14 @@ export function cutAt(t) {
 //   hit: source seconds of the moment (e.g. manifest moments[].t), hitAt: film seconds where it should land.
 for (const cut of EDL) if (cut.hit != null) cut.in = cut.hit - sourceTime({ ...cut, in: 0 }, (cut.hitAt ?? cut.at) - cut.at);
 
-// Source frame (and blend weight toward the next frame) for film time t. Slow-motion sub-cuts (< 0.95×) blend
-// neighbouring frames so 60 fps footage doesn't stutter; normal speed shows exact frames.
-function frameAt(cut, lt, frames) {
+// Blend slow-motion frames when the source frame rate scaled by playback speed is below the film output rate.
+// Higher effective source rates already provide distinct frames for every output frame.
+function frameAt(cut, lt, frames, fps) {
   const src = sourceTime(cut, lt);
   const speed = (sourceTime(cut, lt + 1e-3) - src) / 1e-3;
-  const x = Math.max(0, src * FPS);
+  const x = Math.max(0, src * fps);
   const f = clamp(Math.floor(x + 1e-6), 0, frames);
-  const w = speed < 0.95 && f < frames ? x - f : 0;
+  const w = speed < 1 && fps * speed < FPS * 0.95 && f < frames ? x - f : 0;
   return { src, f, w: w > 0.02 ? w : 0 };
 }
 
@@ -109,19 +109,45 @@ async function seekTo(v, f) {
     const fail = () => reject(new Error(`seek failed: ${v.src}`));
     v.addEventListener('seeked', () => { v.removeEventListener('error', fail); resolve(); }, { once: true });
     v.addEventListener('error', fail, { once: true });
-    v.currentTime = (f + 0.5) / FPS;
+    v.currentTime = (f + 0.5) / v.fps;
   });
   v.frame = f;
 }
 
-// film.seek: bring the active sub-cut's clip to its exact frame (and the next one when blending). Pure function of t.
+// film.seek: seek the base cut and every active alpha overlay before the frame is drawn.
 export async function seekFootage(t) {
   const { cut, lt } = cutAt(t);
   const entry = entryOf(cut.clip);
-  if (!entry) return;
-  const v = await video(entry);
-  const { f, w } = frameAt(cut, lt, v.frames);
-  await Promise.all([seekTo(v, f), w ? video(entry, 1).then((b) => seekTo(b, f + 1)) : null]);
+  const seeks = [];
+  if (entry) {
+    seeks.push((async () => {
+      const v = await video(entry);
+      const { f, w } = frameAt(cut, lt, v.frames, v.fps);
+      await Promise.all([seekTo(v, f), w ? video(entry, 1).then((b) => seekTo(b, f + 1)) : null]);
+    })());
+  }
+  // Slots 0/1 belong to the base and its blend frame; unique overlay slots avoid same-clip seek races.
+  for (const [i, layer] of LAYERS.entries()) {
+    if (layer.alpha !== true || t < layer.at || t >= layer.until) continue;
+    const overlay = entryOf(layer.clip);
+    if (!overlay) continue;
+    seeks.push((async () => {
+      const v = await video(overlay, i + 2);
+      const src = (layer.in ?? 0) + (t - layer.at) * (layer.speed ?? 1);
+      await seekTo(v, clamp(Math.floor(src * v.fps), 0, v.frames));
+    })());
+  }
+  await Promise.all(seeks);
+}
+
+// Draw active alpha WebM layers in declared timeline order; Chromium preserves VP9 alpha in drawImage.
+export function drawLayers(ctx, t) {
+  for (const [i, layer] of LAYERS.entries()) {
+    if (layer.alpha !== true || t < layer.at || t >= layer.until) continue;
+    const entry = entryOf(layer.clip);
+    const v = entry ? ready.get(`${entry.name}|${i + 2}`) : null;
+    if (v) ctx.drawImage(v, 0, 0, W, H);
+  }
 }
 
 function placeholder(ctx, cut, src) {
@@ -147,7 +173,7 @@ export function drawFootage(ctx, t) {
   const len = Math.max(1e-3, nextAt - cut.at);
   const entry = entryOf(cut.clip);
   const v = entry ? ready.get(`${entry.name}|0`) : null;
-  const { src, w } = v ? frameAt(cut, lt, v.frames) : { src: sourceTime(cut, lt), w: 0 };
+  const { src, w } = v ? frameAt(cut, lt, v.frames, v.fps) : { src: sourceTime(cut, lt), w: 0 };
   const vb = w ? ready.get(`${entry.name}|1`) : null;
   const [z0, z1] = cut.zoom ?? [1, 1];
   let z = lerp(z0, z1, E.inOutCubic(clamp(lt / (Number.isFinite(len) ? len : 4))));

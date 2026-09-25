@@ -1,6 +1,6 @@
 // Capture prelude: runs before the game bundle (classic script). Replaces the page clock, timers,
-// requestAnimationFrame and WebSocket so the driver (capture.ts, over CDP) advances the whole client — renderer,
-// interpolation, DOM HUD and CSS animations — one exact 1/60 s step at a time, feeding recorded server messages.
+// requestAnimationFrame and WebSocket so capture.ts advances the renderer, interpolation, particles
+// and UI on a virtual clock, one exact source-frame step at a time.
 
 type Vec = [number, number, number];
 /** Camera override, evaluated in clip-local seconds (0 = first captured frame). */
@@ -12,6 +12,12 @@ export type CamSpec =
       /** Aim at a sky actor (whale / MEV drone n) — look keys become offsets from it; `ride` offsets pos too. */
       track?: 'whale' | 'drone0' | 'drone1' | 'drone2' | 'drone3' | 'drone4' | 'drone5';
       ride?: boolean;
+    }
+  | {
+      mode: 'track';
+      keys: { t: number; pos: Vec; fov?: number }[];
+      lookOffset?: Vec; // offset from the focus player's interpolated position
+      rate?: number; // target damping (1/s)
     }
   | {
       mode: 'orbit';
@@ -76,6 +82,9 @@ interface ViewLike {
   players: ViewPlayerLike[];
   cameraMode: string;
 }
+interface BokehLike {
+  uniforms: { focus: { value: number } };
+}
 interface LrHandles {
   state: { reconcile(self: unknown): void; prediction: unknown; pending: unknown[]; correctionX: number; correctionZ: number };
   renderer: {
@@ -84,6 +93,9 @@ interface LrHandles {
     project(x: number, y: number, z: number): { x: number; y: number; visible: boolean };
   };
   input: { mouseX: number; mouseY: number };
+  BokehPass: new (scene: unknown, camera: RigLike['camera'], params: { focus: number; aperture: number; maxblur?: number }) => BokehLike;
+  cinema: { scene: unknown; post: { composer: { insertPass(pass: BokehLike, index: number): void } } };
+  map: { obstacles: { type: string; x: number; z: number; h: number; hw?: number; hd?: number; r?: number }[] };
 }
 
 const params = new URLSearchParams(location.search);
@@ -251,6 +263,8 @@ let smoothFocus: Vec | null = null;
 let smoothAim: Vec | null = null;
 let lastView: ViewLike | null = null;
 let installed = false;
+let dof: { focus?: 'subject' | number; subjectPoint?: [number, number] } | null = null;
+let bokeh: BokehLike | null = null;
 
 function catmull(p0: number, p1: number, p2: number, p3: number, u: number): number {
   const u2 = u * u;
@@ -259,7 +273,7 @@ function catmull(p0: number, p1: number, p2: number, p3: number, u: number): num
 }
 const easeInOut = (u: number): number => u * u * (3 - 2 * u);
 
-function samplePath(keys: { t: number; pos: Vec; look: Vec; fov?: number }[], t: number): { pos: Vec; look: Vec; fov?: number } {
+function samplePath(keys: { t: number; pos: Vec; look?: Vec; fov?: number }[], t: number): { pos: Vec; look?: Vec; fov?: number } {
   if (t <= keys[0]!.t) return keys[0]!;
   const last = keys[keys.length - 1]!;
   if (t >= last.t) return last;
@@ -273,13 +287,81 @@ function samplePath(keys: { t: number; pos: Vec; look: Vec; fov?: number }[], t:
   let u = (t - k1.t) / (k2.t - k1.t);
   if (keys.length === 2) u = easeInOut(u);
   const pos: Vec = [0, 0, 0];
-  const look: Vec = [0, 0, 0];
+  const look: Vec | undefined = k1.look && k2.look && k0.look && k3.look ? [0, 0, 0] : undefined;
   for (let c = 0; c < 3; c++) {
     pos[c] = catmull(k0.pos[c]!, k1.pos[c]!, k2.pos[c]!, k3.pos[c]!, u);
-    look[c] = catmull(k0.look[c]!, k1.look[c]!, k2.look[c]!, k3.look[c]!, u);
+    if (look) look[c] = catmull(k0.look![c]!, k1.look![c]!, k2.look![c]!, k3.look![c]!, u);
   }
   const fov = k1.fov !== undefined && k2.fov !== undefined ? k1.fov + (k2.fov - k1.fov) * u : k1.fov;
   return { pos, look, fov };
+}
+
+function smoothedFocus(view: ViewLike, x: number, y: number, z: number, rate: number, dt: number): Vec {
+  const f = view.focus;
+  if (!smoothFocus) smoothFocus = [f.x + x, f.y + y, f.z + z];
+  else {
+    const k = 1 - Math.exp(-dt * rate);
+    smoothFocus[0] += (f.x + x - smoothFocus[0]) * k;
+    smoothFocus[1] += (f.y + y - smoothFocus[1]) * k;
+    smoothFocus[2] += (f.z + z - smoothFocus[2]) * k;
+  }
+  return smoothFocus;
+}
+
+/** Keep short chase cameras above the ground and between the subject and the nearest solid wall. */
+function clearChasePosition(pos: Vec, look: Vec): void {
+  pos[1] = Math.max(1.6, pos[1]);
+  const dx = pos[0] - look[0], dy = pos[1] - look[1], dz = pos[2] - look[2];
+  let clear = 1;
+  for (const o of lr().map.obstacles) {
+    if (o.h < 2.2) continue;
+    const hx = o.type === 'box' ? o.hw! : o.r!;
+    const hz = o.type === 'box' ? o.hd! : o.r!;
+    const minX = o.x - hx - 0.35, maxX = o.x + hx + 0.35;
+    const minZ = o.z - hz - 0.35, maxZ = o.z + hz + 0.35;
+    // The subject can stand inside a decorative prop; don't collapse the camera onto it in that case.
+    if (look[0] > minX && look[0] < maxX && look[2] > minZ && look[2] < maxZ && look[1] < o.h) continue;
+    let near = 0, far = clear;
+    if (Math.abs(dx) < 1e-9) {
+      if (look[0] < minX || look[0] > maxX) continue;
+    } else {
+      const a = (minX - look[0]) / dx, b = (maxX - look[0]) / dx;
+      near = Math.max(near, Math.min(a, b));
+      far = Math.min(far, Math.max(a, b));
+    }
+    if (near > far) continue;
+    if (Math.abs(dz) < 1e-9) {
+      if (look[2] < minZ || look[2] > maxZ) continue;
+    } else {
+      const a = (minZ - look[2]) / dz, b = (maxZ - look[2]) / dz;
+      near = Math.max(near, Math.min(a, b));
+      far = Math.min(far, Math.max(a, b));
+    }
+    if (near > far) continue;
+    if (Math.abs(dy) < 1e-9) {
+      if (look[1] < 0 || look[1] > o.h + 0.35) continue;
+    } else {
+      const a = -look[1] / dy, b = (o.h + 0.35 - look[1]) / dy;
+      near = Math.max(near, Math.min(a, b));
+      far = Math.min(far, Math.max(a, b));
+    }
+    if (near <= far) clear = Math.max(0.15, Math.min(clear, near - 0.08));
+  }
+  if (clear < 1) {
+    pos[0] = look[0] + dx * clear;
+    pos[1] = Math.max(1.6, look[1] + dy * clear);
+    pos[2] = look[2] + dz * clear;
+  }
+}
+
+function updateDof(camera: RigLike['camera'], view: ViewLike): void {
+  if (!bokeh || !dof) return;
+  if (typeof dof.focus === 'number') { bokeh.uniforms.focus.value = dof.focus; return; }
+  const focus = view.focus;
+  const x = dof.subjectPoint && cam.mode === 'orbit' ? dof.subjectPoint[0] : focus.x;
+  const y = dof.subjectPoint && cam.mode === 'orbit' ? cam.center[1] + (cam.lookY ?? 1) : focus.y + 1;
+  const z = dof.subjectPoint && cam.mode === 'orbit' ? dof.subjectPoint[1] : focus.z;
+  bokeh.uniforms.focus.value = Math.hypot(camera.position.x - x, camera.position.y - y, camera.position.z - z);
 }
 
 function applyCamera(rig: RigLike, view: ViewLike, dt: number): void {
@@ -288,6 +370,7 @@ function applyCamera(rig: RigLike, view: ViewLike, dt: number): void {
       rig.camera.fov = baseFov;
       rig.camera.updateProjectionMatrix();
     }
+    updateDof(rig.camera, view);
     return;
   }
   const t = (vt - clipStart) / 1000;
@@ -295,7 +378,9 @@ function applyCamera(rig: RigLike, view: ViewLike, dt: number): void {
   let look: Vec;
   let fov: number | undefined;
   if (cam.mode === 'path') {
-    ({ pos, look, fov } = samplePath(cam.keys, t));
+    const sampled = samplePath(cam.keys, t);
+    ({ pos, fov } = sampled);
+    look = sampled.look!;
     if (cam.track) {
       const sky = lr().renderer.sky;
       const at = cam.track === 'whale' ? sky.whale.position : sky.drones[Number(cam.track.slice(5))]?.group.position;
@@ -304,6 +389,9 @@ function applyCamera(rig: RigLike, view: ViewLike, dt: number): void {
         if (cam.ride) pos = [at.x + pos[0], at.y + pos[1], at.z + pos[2]];
       }
     }
+  } else if (cam.mode === 'track') {
+    ({ pos, fov } = samplePath(cam.keys, t));
+    look = smoothedFocus(view, cam.lookOffset?.[0] ?? 0, cam.lookOffset?.[1] ?? 1, cam.lookOffset?.[2] ?? 0, cam.rate ?? 5, dt);
   } else if (cam.mode === 'orbit') {
     const yaw = ((cam.yaw + cam.yawSpeed * t) * Math.PI) / 180;
     const r = cam.radius + (cam.radiusSpeed ?? 0) * t;
@@ -313,22 +401,17 @@ function applyCamera(rig: RigLike, view: ViewLike, dt: number): void {
     look = [cx, cy + (cam.lookY ?? 0), cz];
     fov = cam.fov;
   } else {
-    const f = view.focus;
-    const want: Vec = [f.x, f.y + (cam.lookY ?? 1), f.z];
-    if (!smoothFocus) smoothFocus = want;
-    else {
-      const k = 1 - Math.exp(-dt * (cam.rate ?? 5));
-      for (let c = 0; c < 3; c++) smoothFocus[c]! += (want[c]! - smoothFocus[c]!) * k;
-    }
+    look = smoothedFocus(view, 0, cam.lookY ?? 1, 0, cam.rate ?? 5, dt);
     const yaw = ((cam.yaw + (cam.yawSpeed ?? 0) * t) * Math.PI) / 180;
     const pitch = (cam.pitch * Math.PI) / 180;
     const d = cam.dist + (cam.distSpeed ?? 0) * t;
-    look = [...smoothFocus];
     pos = [
       look[0] + Math.cos(pitch) * Math.cos(yaw) * d,
       look[1] + Math.sin(pitch) * d,
       look[2] + Math.cos(pitch) * Math.sin(yaw) * d,
     ];
+    if (cam.pitch <= 15 && d <= 10) clearChasePosition(pos, look);
+    else if (pos[1] < 1.6) pos[1] = 1.6;
     fov = cam.fov;
   }
   const camera = rig.camera;
@@ -343,6 +426,7 @@ function applyCamera(rig: RigLike, view: ViewLike, dt: number): void {
   camera.up.set(0, 1, 0);
   camera.lookAt(rig.target);
   camera.updateMatrixWorld();
+  updateDof(camera, view);
   rig.groundRadius = rig.measureGroundRadius();
   if (noShake) rig.trauma = 0;
 }
@@ -430,11 +514,25 @@ const capture = {
     return grabbed ?? vt;
   },
   install,
-  setCamera(spec: CamSpec, startMs: number, opts: { noShake?: boolean } = {}): void {
+  setCamera(spec: CamSpec, startMs: number, opts: {
+    noShake?: boolean;
+    dof?: { aperture: number; maxblur?: number; focus?: 'subject' | number };
+    subjectPoint?: [number, number];
+  } = {}): void {
     cam = spec;
     clipStart = startMs;
     noShake = !!opts.noShake;
     smoothFocus = null;
+    if (opts.dof) {
+      const { cinema, BokehPass, renderer } = lr();
+      // HDR half-float scene → DOF → bloom → OutputPass tone map → lens/AA.
+      // Blur before bloom lets defocused neon bleed naturally without blurring the final film grain.
+      bokeh = new BokehPass(cinema.scene, renderer.rig.camera, {
+        focus: 1, aperture: opts.dof.aperture, maxblur: opts.dof.maxblur ?? 0.012,
+      });
+      cinema.post.composer.insertPass(bokeh, 1);
+      dof = { focus: opts.dof.focus, subjectPoint: opts.subjectPoint };
+    }
   },
   now: (): number => vt,
   socketCount: (): number => sockets.length,
