@@ -36,7 +36,7 @@ export type CharacterId =
   | 'uniswap'
   | 'pons'
   | 'long'
-  | 'jump'
+  | 'jpeg'
   | 'fomo'
   | 'pump'
   | 'clanker'
@@ -88,7 +88,7 @@ export const CHARACTERS: CharacterDef[] = [
     primary: '#0FAE85',
     secondary: '#7CFFD4',
     tagline: 'Price discovery at the speed of sound',
-    blurb: 'Onchain token launches with fair price discovery. The home team.',
+    blurb: 'Onchain token launches with fair price discovery.',
     ability: {
       kind: 'blink',
       name: 'Doppler Shift',
@@ -156,17 +156,17 @@ export const CHARACTERS: CharacterDef[] = [
     },
   },
   {
-    id: 'jump',
-    name: 'Jump',
-    site: 'jump.fun',
-    logo: 'badges/jump.png',
-    primary: '#1576D2',
-    secondary: '#8DEEFF',
-    tagline: 'Win the LiqWar',
-    blurb: 'Ethereum memecoin launchpad, liquidity-war veteran. Launch first, ask questions never.',
+    id: 'jpeg',
+    name: 'JPEG',
+    site: 'jpeg.markets',
+    logo: 'badges/jpeg.png',
+    primary: '#A8BFFF',
+    secondary: '#F6F5F1',
+    tagline: 'Culture, with a market',
+    blurb: 'NFT collections with their own coin and markets. For the jpegs. For the people.',
     ability: {
       kind: 'leap',
-      name: 'Send It',
+      name: 'Mint Drop',
       desc: 'Leap up to 16m over anything. Landing shockwave deals 30.',
       cooldown: 11,
       range: 16,

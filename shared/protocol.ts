@@ -57,7 +57,7 @@ export const ST = {
   SLOWED: 32, // Doppler sonic boom
   INVULN: 64, // Bankr vault mode
   REVEALED: 128, // revealed to the receiving client's team (Pons radar)
-  LEAP: 256, // mid-air (Jump leap)
+  LEAP: 256, // mid-air (JPEG Mint Drop leap)
   FIRING: 512, // fired within the last ~150ms
   DEPLOYING: 1024, // still dropping from the sky (y > 0)
   IN_ZONE_DMG: 2048, // taking storm damage

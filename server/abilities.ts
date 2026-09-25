@@ -197,7 +197,7 @@ export function useAbility(match: Match, p: Player, ax: number | undefined, az: 
   return true;
 }
 
-/** Advance a Jump leap: position lerp + y arc, shockwave on landing. */
+/** Advance a JPEG Mint Drop leap: position lerp + y arc, shockwave on landing. */
 export function tickLeap(match: Match, p: Player, dt: number): void {
   const leap = p.leap;
   if (!leap) return;

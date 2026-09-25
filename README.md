@@ -1,6 +1,6 @@
 # LAUNCHPAD ROYALE
 
-Browser multiplayer top-down battle royale starring the crypto launchpad world — Doppler, Uniswap, Pons, Long, Jump, Fomo, Pump, Clanker, Zora, Bankr. Bots fill empty slots. Not financial advice.
+Browser multiplayer top-down battle royale starring the crypto launchpad world — Doppler, Uniswap, Pons, Long, JPEG, Fomo, Pump, Clanker, Zora, Bankr. Bots fill empty slots. An independent side project, not affiliated with or endorsed by any of the launchpads shown. Not financial advice.
 
 **Play: https://z80.wtf/royale** — pick a public lobby from the list, join one by code, or **create** your own
 (public = listed, private = invite link only) and share its invite link (`z80.wtf/royale/#CODE`). Inside a lobby: pick
@@ -52,7 +52,7 @@ Renderer lab (no server needed): `bun build client/render/preview.ts --outdir pu
 | Uniswap | Liquidity Pool — healing pool for allies |
 | Pons | Family Radar — reveal enemies to your team |
 | Long | Long Position — +45% damage |
-| Jump | Send It — leap over walls, landing shockwave |
+| JPEG | Mint Drop — leap over walls, landing shockwave |
 | Fomo | FOMO Rush — speed + fire rate for you and nearby allies |
 | Pump | Pump & Dump — lobbed bomb |
 | Clanker | Deploy Clanker — auto turret |

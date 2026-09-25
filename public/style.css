@@ -837,18 +837,6 @@ label.set-row {
   color: var(--muted);
 }
 
-.doppler-mark {
-  height: 16px;
-  width: auto;
-  opacity: 0.95;
-  filter: drop-shadow(0 0 8px rgba(124, 255, 212, 0.45));
-}
-
-.doppler-fallback {
-  font-weight: 800;
-  color: var(--accent-2);
-}
-
 .lobby-corner {
   position: absolute;
   top: 0;

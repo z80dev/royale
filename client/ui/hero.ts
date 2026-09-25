@@ -4,20 +4,9 @@
 import type { UiContext } from './context';
 import { h } from './dom';
 
-/** Default sub-line under the logo: "a doppler.lol production · not financial advice". */
-export function dopplerCredit(): HTMLElement {
-  const sub = h(
-    'div.logo-sub',
-    null,
-    'a ',
-    h('img.doppler-mark', { src: 'logos/doppler-mark.svg', alt: 'doppler', draggable: 'false' }),
-    h('span.doppler-fallback', { text: 'doppler.lol' }),
-    ' production · not financial advice',
-  );
-  const mark = sub.querySelector<HTMLImageElement>('.doppler-mark')!;
-  mark.addEventListener('error', () => mark.remove(), { once: true });
-  mark.addEventListener('load', () => sub.querySelector('.doppler-fallback')?.remove(), { once: true });
-  return sub;
+/** Default sub-line under the logo. */
+export function heroCredit(): HTMLElement {
+  return h('div.logo-sub', { text: 'an independent side project · not financial advice' });
 }
 
 /** Glitch/shine logo with a kicker line and the given sub-line. */

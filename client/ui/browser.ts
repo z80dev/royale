@@ -4,7 +4,7 @@
 import type { RoomList, RoomSummary, RoomVisibility } from '../../shared/protocol';
 import type { UiContext } from './context';
 import { BOT_SKILL_LABELS, h, setText, TEAM_SIZE_LABELS, toggle } from './dom';
-import { dopplerCredit, heroLogo, walletButton } from './hero';
+import { heroCredit, heroLogo, walletButton } from './hero';
 
 const POLL_MS = 3000;
 /** Room code alphabet: [A-Z2-9] without look-alikes (O/0, I/1). */
@@ -150,7 +150,7 @@ export class LobbyBrowser {
       'div.screen.browser.hidden',
       null,
       h('div.lobby-bg'),
-      h('header.lobby-header', null, heroLogo(dopplerCredit()), h('div.lobby-corner', null, walletButton(ctx))),
+      h('header.lobby-header', null, heroLogo(heroCredit()), h('div.lobby-corner', null, walletButton(ctx))),
       h('main.rb-main', null, listPanel, side),
     );
     this.renderVisibility();

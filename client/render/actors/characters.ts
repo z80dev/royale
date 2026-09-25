@@ -402,7 +402,7 @@ const tmpVec = new THREE.Vector3();
 const DMG_BUFF_COLOR = brandTrim('long');
 const RUSH_COLOR = brandTrim('fomo');
 const RUSH_COLOR_2 = brandGlowColor('fomo');
-const LEAP_RADIUS = CHARACTER_BY_ID.jump.ability.radius ?? 4;
+const LEAP_RADIUS = CHARACTER_BY_ID.jpeg.ability.radius ?? 4;
 
 function makeMesh(geo: THREE.BufferGeometry, material: THREE.Material, castShadow: boolean): THREE.Mesh {
   const m = new THREE.Mesh(geo, material);
